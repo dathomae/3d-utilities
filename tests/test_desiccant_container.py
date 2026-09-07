@@ -18,12 +18,17 @@ from desiccant_container import (
     DIVIDER_RATIO,
     DIVIDER_THICKNESS,
     LENGTH,
+    LID_HEIGHT,
+    LID_TOP_THICKNESS,
     LONG_END,
+    OOZE_CLEARANCE,
     RIM_HEIGHT,
     RIM_INSET,
     SHORT_END,
     WALL_THICKNESS,
     make_body,
+    make_lid_large,
+    make_lid_small,
 )
 
 
@@ -50,6 +55,12 @@ def _intersect_shapes(body, probe):
 def _intersect_volume(body, probe):
     """Total volume of the intersection (0.0 when the probe is in void)."""
     return sum(shape.volume for shape in _intersect_shapes(body, probe))
+
+
+def _outer_half_width(x: float) -> float:
+    """Half-width of the body's outer trapezoid at a given X, in mm."""
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    return SHORT_END / 2 + slope * (x + LENGTH / 2)
 
 
 def test_make_body_returns_part():
@@ -188,3 +199,177 @@ def test_body_is_single_closed_shell():
     """The body boundary is one closed shell: no open or split surfaces."""
     body = make_body()
     assert len(body.shells()) == 1
+
+
+# --- Lid geometry tests ---
+
+
+def test_make_lid_small_returns_part():
+    """make_lid_small() must return a valid build123d Part."""
+    lid = make_lid_small()
+    assert isinstance(lid, Part)
+    assert lid.is_valid
+
+
+def test_make_lid_large_returns_part():
+    """make_lid_large() must return a valid build123d Part."""
+    lid = make_lid_large()
+    assert isinstance(lid, Part)
+    assert lid.is_valid
+
+
+def test_lid_small_bounding_box():
+    """The small lid footprint matches the silica compartment."""
+    lid = make_lid_small()
+    right_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO - (
+        DIVIDER_THICKNESS / 2 - RIM_INSET
+    )
+    right_width = 2 * _outer_half_width(right_x)
+    size = tuple(lid.bounding_box().size)
+    assert size == pytest.approx((right_x - (-LENGTH / 2), right_width, LID_HEIGHT))
+
+
+def test_lid_large_bounding_box():
+    """The large lid footprint matches the alumina compartment."""
+    lid = make_lid_large()
+    left_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO + (
+        DIVIDER_THICKNESS / 2 - RIM_INSET
+    )
+    size = tuple(lid.bounding_box().size)
+    assert size == pytest.approx((LENGTH / 2 - left_x, LONG_END, LID_HEIGHT))
+
+
+def test_lid_small_top_plate_is_solid():
+    """The top 2 mm of the small lid is a solid plate over the compartment."""
+    lid = make_lid_small()
+    right_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO - (
+        DIVIDER_THICKNESS / 2 - RIM_INSET
+    )
+    center_x = (-LENGTH / 2 + right_x) / 2
+    probe = _probe(
+        20,
+        20,
+        LID_TOP_THICKNESS,
+        (center_x, 0, LID_HEIGHT - LID_TOP_THICKNESS),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(
+        20 * 20 * LID_TOP_THICKNESS
+    )
+
+
+def test_lid_large_top_plate_is_solid():
+    """The top 2 mm of the large lid is a solid plate over the compartment."""
+    lid = make_lid_large()
+    left_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO + (
+        DIVIDER_THICKNESS / 2 - RIM_INSET
+    )
+    center_x = (left_x + LENGTH / 2) / 2
+    probe = _probe(
+        20,
+        20,
+        LID_TOP_THICKNESS,
+        (center_x, 0, LID_HEIGHT - LID_TOP_THICKNESS),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(
+        20 * 20 * LID_TOP_THICKNESS
+    )
+
+
+def test_lid_small_skirt_is_hollow():
+    """The bottom 2 mm of the small lid is hollow except for the skirt wall."""
+    lid = make_lid_small()
+    right_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO - (
+        DIVIDER_THICKNESS / 2 - RIM_INSET
+    )
+    center_x = (-LENGTH / 2 + right_x) / 2
+    probe = _probe(
+        20,
+        20,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (center_x, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(0, abs=1e-6)
+
+
+def test_lid_large_skirt_is_hollow():
+    """The bottom 2 mm of the large lid is hollow except for the skirt wall."""
+    lid = make_lid_large()
+    left_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO + (
+        DIVIDER_THICKNESS / 2 - RIM_INSET
+    )
+    center_x = (left_x + LENGTH / 2) / 2
+    probe = _probe(
+        20,
+        20,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (center_x, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(0, abs=1e-6)
+
+
+def test_lid_small_skirt_wall_thickness():
+    """The small lid's short-end skirt is 2 mm tall and fills the wall thickness."""
+    lid = make_lid_small()
+    wall_thickness = RIM_INSET - OOZE_CLEARANCE
+    probe = _probe(
+        wall_thickness,
+        40,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (-LENGTH / 2 + wall_thickness / 2, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(
+        wall_thickness * 40 * (LID_HEIGHT - LID_TOP_THICKNESS)
+    )
+
+
+def test_lid_large_skirt_wall_thickness():
+    """The large lid's long-end skirt is 2 mm tall and fills the wall thickness."""
+    lid = make_lid_large()
+    wall_thickness = RIM_INSET - OOZE_CLEARANCE
+    probe = _probe(
+        wall_thickness,
+        40,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (LENGTH / 2 - wall_thickness / 2, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(
+        wall_thickness * 40 * (LID_HEIGHT - LID_TOP_THICKNESS)
+    )
+
+
+def test_lid_small_skirt_to_rim_clearance():
+    """The small lid's short-end skirt leaves a 0.2 mm gap to the body rim."""
+    lid = make_lid_small()
+    gap_center_x = -LENGTH / 2 + RIM_INSET - OOZE_CLEARANCE / 2
+    probe = _probe(
+        OOZE_CLEARANCE,
+        40,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (gap_center_x, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(0, abs=1e-6)
+
+
+def test_lid_large_skirt_to_rim_clearance():
+    """The large lid's long-end skirt leaves a 0.2 mm gap to the body rim."""
+    lid = make_lid_large()
+    gap_center_x = LENGTH / 2 - RIM_INSET + OOZE_CLEARANCE / 2
+    probe = _probe(
+        OOZE_CLEARANCE,
+        40,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (gap_center_x, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(0, abs=1e-6)
+
+
+def test_lid_small_is_single_closed_shell():
+    """The small lid boundary is one closed shell."""
+    lid = make_lid_small()
+    assert len(lid.shells()) == 1
+
+
+def test_lid_large_is_single_closed_shell():
+    """The large lid boundary is one closed shell."""
+    lid = make_lid_large()
+    assert len(lid.shells()) == 1

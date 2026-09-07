@@ -49,6 +49,11 @@ RIM_HEIGHT = 2.0
 RIM_INSET = 2.0
 DIVIDER_RATIO = 1 / 3
 
+# --- Lid dimensions (mm) ---
+LID_HEIGHT = 4.0
+LID_TOP_THICKNESS = 2.0
+OOZE_CLEARANCE = 0.2
+
 
 def _trapezoid_vertices(
     length: float,
@@ -91,6 +96,12 @@ def _interior_half_width(x: float) -> float:
     perp = math.sqrt(1 + slope * slope)
     outer_half = SHORT_END / 2 + slope * (x + LENGTH / 2)
     return outer_half - WALL_THICKNESS * perp
+
+
+def _outer_half_width(x: float) -> float:
+    """Outer trapezoid half-width in Y at a given X, in mm."""
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    return SHORT_END / 2 + slope * (x + LENGTH / 2)
 
 
 def make_body() -> Part:
@@ -161,3 +172,50 @@ def make_body() -> Part:
             extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
 
     return body.part
+
+
+def _make_lid(left_x: float, right_x: float) -> Part:
+    """Return a lid covering the trapezoidal footprint between two X stations.
+
+    The lid is a 2 mm top plate plus a 2 mm skirt.  The skirt wall is
+    inset from the outer footprint by ``RIM_INSET - OOZE_CLEARANCE`` so it
+    clears the body's 2 mm rim by ``OOZE_CLEARANCE`` radially while the
+    skirt's outer face stays flush with the body's outer face.
+    """
+    lid_length = right_x - left_x
+    center_x = (left_x + right_x) / 2
+    left_width = 2 * _outer_half_width(left_x)
+    right_width = 2 * _outer_half_width(right_x)
+    skirt_inset = RIM_INSET - OOZE_CLEARANCE
+
+    outer = _trapezoid_vertices(lid_length, left_width, right_width)
+    outer = [v + Vector(center_x, 0) for v in outer]
+    inner = _trapezoid_vertices(lid_length, left_width, right_width, skirt_inset)
+    inner = [v + Vector(center_x, 0) for v in inner]
+
+    with BuildPart() as lid:
+        # Top plate plus skirt outer wall.
+        with BuildSketch(Plane.XY):
+            Polygon(outer)
+        extrude(amount=LID_HEIGHT)
+
+        # Hollow out the underside to leave a 2 mm skirt around the rim.
+        with BuildSketch(Plane.XY):
+            Polygon(inner)
+        extrude(amount=LID_HEIGHT - LID_TOP_THICKNESS, mode=Mode.SUBTRACT)
+
+    return lid.part
+
+
+def make_lid_small() -> Part:
+    """Return the lid for the small (silica) compartment."""
+    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    right_x = divider_center_x - (DIVIDER_THICKNESS / 2 - RIM_INSET)
+    return _make_lid(-LENGTH / 2, right_x)
+
+
+def make_lid_large() -> Part:
+    """Return the lid for the large (alumina) compartment."""
+    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    left_x = divider_center_x + (DIVIDER_THICKNESS / 2 - RIM_INSET)
+    return _make_lid(left_x, LENGTH / 2)
