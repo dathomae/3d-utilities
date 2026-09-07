@@ -4,7 +4,7 @@ Records the task or story currently in progress. Updated at the start and end of
 
 ## Active Tasks
 
-- **Capture the repository purpose** — updating `README.md` and the `memory-bank/` documents (`brief.md`, `requirements.md`, `context.md`, `concepts.md`, `terms.md`, `design/design.md`) to describe `3d-utilities` as a collection of small parametric utilities for 3D printing and milling.
+- **Desiccant container plan** — plan drafted in `memory-bank/plans/desiccant-container_plan.md` (establish the per-utility `src/<name>/` directory convention and build the two-compartment desiccant container). Awaiting user approval; next step is to create a story via `scripts/add-new-story.pdd.script.md`.
 
 ## Recently Completed
 
