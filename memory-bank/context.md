@@ -1,11 +1,12 @@
 # Context
 
-This file is a template that records the task or story currently in progress. Update it at the start and end of every task, and remove entries once work is complete. It is not a historical log.
+Records the task or story currently in progress. Updated at the start and end of every task; completed entries are removed. Not a historical log.
 
 ## Active Tasks
 
-TODO: Describe the task or story in progress, with relevant details and pointers to its plan or story files.
+- **Capture the repository purpose** — updating `README.md` and the `memory-bank/` documents (`brief.md`, `requirements.md`, `context.md`, `concepts.md`, `terms.md`, `design/design.md`) to describe `3d-utilities` as a collection of small parametric utilities for 3D printing and milling.
 
 ## Recently Completed
 
-TODO: Note completed tasks and stories with a brief statement each, plus a pointer to where the details live.
+- **Base repository setup** — the repository was converted from a generic template into this project's home, with the Python package layout, `setup.sh`, and the memory-bank skeletons in place (see `memory-bank/plans/base-repository-setup_plan.md`).
+- **Initial mill-bed utilities** — `src/scaffold/mill_bed.py` encodes the vertical mill bed's M5 mounting-hole pattern, and `src/scaffold/mounting_sheet.py` builds a test sheet to verify that pattern against the machine.
