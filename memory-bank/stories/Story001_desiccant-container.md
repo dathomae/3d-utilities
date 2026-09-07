@@ -57,7 +57,7 @@ Create the `src/desiccant_container/` package and implement `make_body()`, the t
 
 Completion criteria: `make_body()` returns a valid `Part` meeting the assertions above; `python -m pytest` is green.
 
-### Task 3: Lid geometry (test-first) — In Progress
+### Task 3: Lid geometry (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Task 2 (body rim geometry).
 
