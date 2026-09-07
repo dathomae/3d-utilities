@@ -4,7 +4,7 @@
 
 `3d-utilities` is a collection, not a single artifact, so its "design" is the repository structure and shared conventions rather than one assembly of parts.
 
-- Modeling code lives in per-utility directories under `src/`: each new utility is its own `src/<utility_name>/` directory, holding the object's geometry as build123d code and a `README.md`, and exports its geometry as STEP into `manufacture/`. The existing `src/scaffold/` package is grandfathered as the pre-convention home of the older modeling code.
+- Modeling code lives in per-utility directories under `src/`: each new utility is its own `src/<utility_name>/` directory, containing the utility's parametric modeling code and its `README.md`, and exports its geometry as STEP into `manufacture/`. The existing `src/scaffold/` package is grandfathered as the pre-convention home of the older modeling code.
 - `resources/modeling/` holds reusable, cross-utility knowledge (screws, mill jigs, brackets, snap fits, and general techniques); `resources/apis/build123d/` holds the build123d API and usage notes.
 - `memory-bank/` holds the living project records (brief, requirements, context, concepts, terms, lessons learned, bugs) plus plans and stories.
 - A utility may also carry its own design document in a subdirectory under `memory-bank/design/`, following the same skeleton as this file.
@@ -23,4 +23,4 @@ The utilities that predate the per-utility directory convention remain in the gr
 | Mounting test sheet | `src/scaffold/mounting_sheet.py` | A 1 mm sheet with an M5 clearance hole at each bed location, printed to verify the pattern. | 3D printing |
 | Example box | `src/scaffold/example.py` | A 10 mm cube demonstrating the module-and-export workflow. | 3D printing / milling |
 
-The desiccant container is the first utility under the per-utility directory convention, living in `src/desiccant_container/`. It defines three parts, built by `make_body`, `make_lid_small`, and `make_lid_large`, and exported as `desiccant_body.step`, `desiccant_lid_small.step`, and `desiccant_lid_large.step`; the parts are specified in the [desiccant container plan](../plans/desiccant-container_plan.md).
+The desiccant container is the first utility to follow the per-utility directory convention, living in `src/desiccant_container/`. It defines three parts, built by `make_body`, `make_lid_small`, and `make_lid_large`, and exported as `desiccant_body.step`, `desiccant_lid_small.step`, and `desiccant_lid_large.step`; the parts are specified in the [desiccant container plan](../plans/desiccant-container_plan.md).
