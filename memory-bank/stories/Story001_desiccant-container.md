@@ -30,7 +30,7 @@ None.
 - Task 4b (embossing) was evaluated as borderline-small but is routed to `code-for-story-implementor` per the when-in-doubt rule (build123d `Text` placement and extrusion onto a face have non-obvious API details that a limited-context agent may not resolve).
 - Writing tasks (1, 6) route to `technical-writer-for-story-implementor`.
 
-### Task 1: Document the per-utility directory convention — Not Started
+### Task 1: Document the per-utility directory convention — Completed
 
 Route: `technical-writer-for-story-implementor` (docs-only; no TDD).
 
@@ -44,7 +44,7 @@ Update the repository documentation so that each utility is consistently describ
 
 Completion criteria: all five files state the per-directory convention; a grep for the stale "one module under `src/scaffold/`" phrasing returns no matches (the `scaffold` package may still be mentioned as the grandfathered placeholder).
 
-### Task 2: Body geometry (test-first) — Not Started
+### Task 2: Body geometry (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle: write tests, then implement).
 
