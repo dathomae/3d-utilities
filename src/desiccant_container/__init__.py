@@ -1,4 +1,9 @@
-"""Desiccant container utility: parametric two-compartment tray geometry."""
+"""Desiccant container utility: parametric two-compartment tray geometry.
+
+Exports the body builder (`make_body`) and the two lid builders
+(`make_lid_small`, `make_lid_large`) together with the module-level dimension
+parameters.
+"""
 
 from desiccant_container.container import (
     BODY_HEIGHT,

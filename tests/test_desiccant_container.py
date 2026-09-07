@@ -9,6 +9,8 @@ boolean-intersected with the part: the intersection volume equals the probe
 volume when the probe lies entirely inside solid, and ~0 when in void.
 """
 
+import math
+
 import pytest
 from build123d import Align, Box, Location, Part
 
@@ -219,24 +221,35 @@ def test_make_lid_large_returns_part():
 
 
 def test_lid_small_bounding_box():
-    """The small lid footprint matches the silica compartment."""
+    """The small lid footprint spans the silica compartment up to the divider rim ridge."""
     lid = make_lid_small()
-    right_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO - (
-        DIVIDER_THICKNESS / 2 - RIM_INSET
-    )
-    right_width = 2 * _outer_half_width(right_x)
+    divider_centerline = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    rim_ridge_half_width = DIVIDER_THICKNESS / 2 - RIM_INSET
+    right_edge = divider_centerline - rim_ridge_half_width
+    expected_x_size = right_edge - (-LENGTH / 2)
+    expected_y_size = 2 * _outer_half_width(right_edge)
     size = tuple(lid.bounding_box().size)
-    assert size == pytest.approx((right_x - (-LENGTH / 2), right_width, LID_HEIGHT))
+    assert size == pytest.approx((expected_x_size, expected_y_size, LID_HEIGHT))
 
 
 def test_lid_large_bounding_box():
-    """The large lid footprint matches the alumina compartment."""
+    """The large lid footprint spans the alumina compartment from the divider rim ridge."""
     lid = make_lid_large()
-    left_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO + (
-        DIVIDER_THICKNESS / 2 - RIM_INSET
-    )
+    divider_centerline = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    rim_ridge_half_width = DIVIDER_THICKNESS / 2 - RIM_INSET
+    left_edge = divider_centerline + rim_ridge_half_width
+    expected_x_size = LENGTH / 2 - left_edge
     size = tuple(lid.bounding_box().size)
-    assert size == pytest.approx((LENGTH / 2 - left_x, LONG_END, LID_HEIGHT))
+    assert size == pytest.approx((expected_x_size, LONG_END, LID_HEIGHT))
+
+
+def test_lids_are_separated_by_divider_rim_ridge():
+    """The two lids straddle the divider's 4 mm rim ridge without overlap."""
+    small_lid = make_lid_small()
+    large_lid = make_lid_large()
+    gap = large_lid.bounding_box().min.X - small_lid.bounding_box().max.X
+    assert gap == pytest.approx(DIVIDER_THICKNESS - 2 * RIM_INSET)
+    assert small_lid.bounding_box().max.X < large_lid.bounding_box().min.X
 
 
 def test_lid_small_top_plate_is_solid():
@@ -359,6 +372,22 @@ def test_lid_large_skirt_to_rim_clearance():
         40,
         LID_HEIGHT - LID_TOP_THICKNESS,
         (gap_center_x, 0, 0),
+    )
+    assert _intersect_volume(lid, probe) == pytest.approx(0, abs=1e-6)
+
+
+def test_lid_slanted_side_skirt_to_rim_clearance():
+    """The lid skirt clears the slanted side-wall rim by 0.2 mm radially."""
+    lid = make_lid_large()
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    perp = math.sqrt(1 + slope * slope)
+    y_outer = _outer_half_width(0)
+    gap_center_y = y_outer - (RIM_INSET - OOZE_CLEARANCE / 2) * perp
+    probe = _probe(
+        0.1,
+        0.1,
+        LID_HEIGHT - LID_TOP_THICKNESS,
+        (0, gap_center_y, 0),
     )
     assert _intersect_volume(lid, probe) == pytest.approx(0, abs=1e-6)
 

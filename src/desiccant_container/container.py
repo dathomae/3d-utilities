@@ -1,4 +1,4 @@
-"""Parametric geometry for the desiccant container body.
+"""Parametric geometry for the desiccant container body and lids.
 
 The body is a trapezoidal tray: an isosceles trapezoid in plan view,
 symmetric about its long centerline, centered on the origin (X along length,
@@ -11,6 +11,11 @@ It consists of a 2 mm bottom plate, 4 mm outer walls, a solid 8 mm internal
 dividing wall (no vents) that keeps the two desiccants apart, and a 2 mm rim
 stepped 2 mm inward on the top of every wall (outer perimeter and divider).
 All dimensions are module-level parameters in millimetres.
+
+Two separate lids close the compartments: each is a 2 mm top plate plus a
+2 mm skirt, with the skirt's outer face flush with the body's outer face and
+a ``OOZE_CLEARANCE`` radial gap to the rim's outer face so the lids mate
+without binding.
 
 The interior cavity is formed by offsetting each of the four outer faces
 inward by ``WALL_THICKNESS`` perpendicular to that face (a true polygon
