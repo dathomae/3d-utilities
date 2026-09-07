@@ -11,7 +11,16 @@ It consists of a 2 mm bottom plate, 4 mm outer walls, a solid 8 mm internal
 dividing wall (no vents) that keeps the two desiccants apart, and a 2 mm rim
 stepped 2 mm inward on the top of every wall (outer perimeter and divider).
 All dimensions are module-level parameters in millimetres.
+
+The interior cavity is formed by offsetting each of the four outer faces
+inward by ``WALL_THICKNESS`` perpendicular to that face (a true polygon
+offset), so the slanted side walls - like the end walls - are exactly
+``WALL_THICKNESS`` thick measured normal to the face.  The same
+perpendicular offset (by ``RIM_INSET``) defines the rim step on the top of
+every wall.
 """
+
+import math
 
 from build123d import (
     Align,
@@ -51,30 +60,37 @@ def _trapezoid_vertices(
 
     X spans ``+/- length/2`` along the length; Y spans ``+/- short_end/2``
     at the short (silica) end and ``+/- long_end/2`` at the long (alumina)
-    end.  ``inset`` shrinks the trapezoid by that amount on all four sides
-    (used for the interior cavity and the rim step).
+    end.  ``inset`` offsets each of the four faces inward by that amount
+    PERPENDICULAR to the face (a true polygon offset), so an inset face is
+    exactly ``inset`` away from its outer counterpart everywhere and the
+    slanted side walls keep the outer taper.  ``inset=0`` yields the outer
+    footprint.
     """
+    slope = (long_end - short_end) / (2 * length)
+    perp = math.sqrt(1 + slope * slope)
     x_end = length / 2 - inset
+    short_half = short_end / 2 + slope * inset - perp * inset
+    long_half = long_end / 2 - slope * inset - perp * inset
     return [
-        Vector(-x_end, -(short_end / 2 - inset)),
-        Vector(-x_end, +(short_end / 2 - inset)),
-        Vector(+x_end, +(long_end / 2 - inset)),
-        Vector(+x_end, -(long_end / 2 - inset)),
+        Vector(-x_end, -short_half),
+        Vector(-x_end, +short_half),
+        Vector(+x_end, +long_half),
+        Vector(+x_end, -long_half),
     ]
 
 
 def _interior_half_width(x: float) -> float:
     """Interior (cavity) half-width in Y at a given X, in mm.
 
-    The cavity profile is the outer trapezoid inset by ``WALL_THICKNESS`` on
-    all four sides, so the side walls are nominally ``WALL_THICKNESS`` thick.
+    The cavity profile is the outer trapezoid with each face offset inward by
+    ``WALL_THICKNESS`` perpendicular to that face, so every wall (end walls
+    and slanted side walls) is exactly ``WALL_THICKNESS`` thick measured
+    normal to its face.
     """
-    inner_x0 = -LENGTH / 2 + WALL_THICKNESS
-    inner_span = LENGTH - 2 * WALL_THICKNESS
-    short_half = SHORT_END / 2 - WALL_THICKNESS
-    long_half = LONG_END / 2 - WALL_THICKNESS
-    fraction = (x - inner_x0) / inner_span
-    return short_half + (long_half - short_half) * fraction
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    perp = math.sqrt(1 + slope * slope)
+    outer_half = SHORT_END / 2 + slope * (x + LENGTH / 2)
+    return outer_half - WALL_THICKNESS * perp
 
 
 def make_body() -> Part:
@@ -82,8 +98,9 @@ def make_body() -> Part:
 
     Construction:
     1. extrude the outer trapezoid footprint to ``BODY_HEIGHT``,
-    2. cut the interior cavity (trapezoid inset by ``WALL_THICKNESS``) from
-       the top of the ``BOTTOM_THICKNESS`` bottom plate up to the body top,
+    2. cut the interior cavity (outer faces offset inward by
+       ``WALL_THICKNESS`` perpendicular to each face) from the top of the
+       ``BOTTOM_THICKNESS`` bottom plate up to the body top,
     3. add the solid ``DIVIDER_THICKNESS`` dividing wall at ``DIVIDER_RATIO``
        of the length from the short end's outer face, spanning the full
        interior width so the two compartments are sealed from each other,
