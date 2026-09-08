@@ -70,7 +70,7 @@ Implement `make_lid_small()` (covers the 65 mm silica compartment) and `make_lid
 
 Completion criteria: both lid builders return valid `Part`s that mate with the body's rim at the specified 0.2 mm clearance; `python -m pytest` is green.
 
-### Task 4a: Add vent slots to the body walls and lid top plates (test-first) — In Progress
+### Task 4a: Add vent slots to the body walls and lid top plates (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Tasks 2 and 3.
 
