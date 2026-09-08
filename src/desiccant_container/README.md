@@ -13,7 +13,7 @@ The two desiccants recharge at very different temperatures, so they must stay ph
 
 ## Dimensions
 
-Top view is an isosceles trapezoid, symmetric about its long centerline. All dimensions are in millimeters, and the geometry is parametric: every value below is a module-level constant in `container.py`.
+Top view is an isosceles trapezoid, symmetric about its long centerline. All dimensions are in millimeters, and the geometry is parametric: every named value below is a module-level constant in `container.py` (assembled height is derived).
 
 | Parameter | Symbol | Value (mm) |
 |-----------|--------|------------|
@@ -70,7 +70,7 @@ The command builds the three parts and writes a STEP file for each into `manufac
 - `desiccant_lid_small.step`
 - `desiccant_lid_large.step`
 
-The `-o/--outdir` option redirects the STEP files to another directory, and `--show` opens a part in the ocp_vscode viewer after export. Run the command from the repository root so the default relative path resolves to the tracked `manufacture/` directory. STEP files are generated artifacts and are gitignored.
+The `-o/--outdir` option redirects the STEP files to another directory, and `--show` opens a part in the ocp_vscode viewer after export. Run it from the repository root so the default relative path resolves to the tracked `manufacture/` directory. STEP files are generated artifacts and are gitignored.
 
 ## Print
 
