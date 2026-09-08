@@ -17,6 +17,13 @@ Two separate lids close the compartments: each is a 2 mm top plate plus a
 a ``OOZE_CLEARANCE`` radial gap to the rim's outer face so the lids mate
 without binding.
 
+Ventilation: 5 x 1 mm rectangular through-slots (``VENT_SLOT_LENGTH`` x
+``VENT_SLOT_HEIGHT``) with 1 mm solid margins (``VENT_MARGIN``) perforate
+the four outer side walls of the body and both lids' top plates - never the
+bottom plate or the internal dividing wall.  Cutting boxes extend slightly
+past the faces they pierce (``VENT_OVERCUT``, ``LID_SLOT_OVERCUT``) so the
+booleans stay clean.
+
 The interior cavity is formed by offsetting each of the four outer faces
 inward by ``WALL_THICKNESS`` perpendicular to that face (a true polygon
 offset), so the slanted side walls - like the end walls - are exactly
@@ -32,6 +39,7 @@ from build123d import (
     Box,
     BuildPart,
     BuildSketch,
+    Location,
     Locations,
     Mode,
     Part,
@@ -58,6 +66,16 @@ DIVIDER_RATIO = 1 / 3
 LID_HEIGHT = 4.0
 LID_TOP_THICKNESS = 2.0
 OOZE_CLEARANCE = 0.2
+
+# --- Vent dimensions (mm) ---
+VENT_SLOT_LENGTH = 5.0
+VENT_SLOT_HEIGHT = 1.0
+VENT_MARGIN = 1.0
+VENT_OVERCUT = 1.0
+# Lid slots use a smaller overcut than the body-wall slots so the cutting box
+# barely leaves the top plate: a larger overcut would notch the skirt wall
+# where the outermost slots meet it.
+LID_SLOT_OVERCUT = 0.4
 
 
 def _trapezoid_vertices(
@@ -109,6 +127,104 @@ def _outer_half_width(x: float) -> float:
     return SHORT_END / 2 + slope * (x + LENGTH / 2)
 
 
+def _wall_angle() -> float:
+    """Angle (radians) of the slanted side walls relative to the X axis."""
+    return math.atan2(LONG_END - SHORT_END, 2 * LENGTH)
+
+
+def _wall_length() -> float:
+    """Length of one slanted side wall along its face, in mm."""
+    return math.sqrt(LENGTH ** 2 + ((LONG_END - SHORT_END) / 2) ** 2)
+
+
+def _slot_centers(span: float, slot_size: float, margin: float) -> tuple[list[float], float]:
+    """Return equally spaced slot centers and the gap between them within ``span``.
+
+    Edge margins are exactly ``margin``. The gap between adjacent slots is always
+    >= ``margin`` (any leftover span is distributed evenly as extra gap).
+    """
+    if span < 2 * margin + slot_size:
+        return [], 0.0
+    n = int((span - margin) // (slot_size + margin))
+    if n < 1:
+        return [], 0.0
+    used = 2 * margin + n * slot_size
+    gap = (span - used) / (n - 1) if n > 1 else 0.0
+    first = margin + slot_size / 2
+    return [first + i * (slot_size + gap) for i in range(n)], gap
+
+
+def _body_vent_slot_boxes() -> list[Part]:
+    """Positioned through-slot boxes for the four outer walls of the body.
+
+    The boxes are returned as a list of un-cut shapes so ``make_body`` can
+    subtract them from the base tray in a single fused boolean operation
+    (hundreds of sequential ``Mode.SUBTRACT`` boxes would take minutes).
+    Slots are not cut into the bottom plate or the internal dividing wall.
+    Each box extends slightly beyond the wall faces (``VENT_OVERCUT``) to
+    avoid coplanar boolean issues.
+    """
+    boxes: list[Part] = []
+    overcut = VENT_OVERCUT
+    z_centers, _ = _slot_centers(BODY_HEIGHT, VENT_SLOT_HEIGHT, VENT_MARGIN)
+    if not z_centers:
+        return boxes
+
+    # Short end wall (X = -LENGTH/2).  ``_slot_centers`` returns positions in
+    # ``[0, span]``, so recentre them about the wall: subtract SHORT_END / 2.
+    y_centers, _ = _slot_centers(SHORT_END, VENT_SLOT_LENGTH, VENT_MARGIN)
+    for y_rel in y_centers:
+        y = y_rel - SHORT_END / 2
+        for z in z_centers:
+            boxes.append(
+                Box(
+                    WALL_THICKNESS + overcut,
+                    VENT_SLOT_LENGTH,
+                    VENT_SLOT_HEIGHT,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                ).moved(Location((-LENGTH / 2 + WALL_THICKNESS / 2, y, z)))
+            )
+
+    # Long end wall (X = +LENGTH/2).
+    y_centers, _ = _slot_centers(LONG_END, VENT_SLOT_LENGTH, VENT_MARGIN)
+    for y_rel in y_centers:
+        y = y_rel - LONG_END / 2
+        for z in z_centers:
+            boxes.append(
+                Box(
+                    WALL_THICKNESS + overcut,
+                    VENT_SLOT_LENGTH,
+                    VENT_SLOT_HEIGHT,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                ).moved(Location((LENGTH / 2 - WALL_THICKNESS / 2, y, z)))
+            )
+
+    # Slanted side walls (both Y signs).
+    angle = _wall_angle()
+    wall_len = _wall_length()
+    s_centers, _ = _slot_centers(wall_len, VENT_SLOT_LENGTH, VENT_MARGIN)
+    for y_sign in (1, -1):
+        angle_deg = (
+            math.degrees(angle) if y_sign > 0 else math.degrees(-angle)
+        )
+        for s in s_centers:
+            x = -LENGTH / 2 + s * math.cos(angle)
+            outer_y = y_sign * _outer_half_width(x)
+            inner_y = y_sign * _interior_half_width(x)
+            mid_y = (outer_y + inner_y) / 2
+            for z in z_centers:
+                boxes.append(
+                    Box(
+                        VENT_SLOT_LENGTH,
+                        WALL_THICKNESS + overcut,
+                        VENT_SLOT_HEIGHT,
+                        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                    ).moved(Location((x, mid_y, z), (0, 0, angle_deg)))
+                )
+
+    return boxes
+
+
 def make_body() -> Part:
     """Return the desiccant container body as a build123d Part.
 
@@ -123,7 +239,11 @@ def make_body() -> Part:
     4. step the top ``RIM_HEIGHT`` mm of every wall inward by ``RIM_INSET``:
        a ring around the outer perimeter (rim flush with the interior face,
        leaving a 2 mm exterior shelf) and two 2 mm shelves on the divider,
-       leaving the 4 mm centered divider rim ridge.
+       leaving the 4 mm centered divider rim ridge,
+    5. cut the vent slots (5 x 1 mm, 1 mm margins, see
+       ``_body_vent_slot_boxes``) through the four outer side walls in a
+       single fused boolean operation; the bottom plate and the internal
+       dividing wall carry no vents.
     """
     divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
     # The interior narrows toward the short end, so the divider must span the
@@ -176,7 +296,9 @@ def make_body() -> Part:
                     Rectangle(RIM_INSET, 2 * divider_half_span)
             extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
 
-    return body.part
+    # 5. Vent slots on the four outer side walls (never on bottom/divider):
+    #    cut the fused slot tool from the tray in a single boolean operation.
+    return Part([body.part.cut(*_body_vent_slot_boxes())])
 
 
 def _make_lid(left_x: float, right_x: float) -> Part:
@@ -186,6 +308,11 @@ def _make_lid(left_x: float, right_x: float) -> Part:
     inset from the outer footprint by ``RIM_INSET - OOZE_CLEARANCE`` so it
     clears the body's 2 mm rim by ``OOZE_CLEARANCE`` radially while the
     skirt's outer face stays flush with the body's outer face.
+
+    The top plate carries the vent slots (5 x 1 mm, 1 mm margins).  Their
+    cutting boxes extend just below the plate's underside by
+    ``LID_SLOT_OVERCUT`` (0.2 mm per side) for a clean boolean, which only
+    barely touches the skirt where the outermost slots meet it.
     """
     lid_length = right_x - left_x
     center_x = (left_x + right_x) / 2
@@ -209,7 +336,22 @@ def _make_lid(left_x: float, right_x: float) -> Part:
             Polygon(inner)
         extrude(amount=LID_HEIGHT - LID_TOP_THICKNESS, mode=Mode.SUBTRACT)
 
-    return lid.part
+    # Vent slots on the top plate (5 x 1 mm, 1 mm margins, through-cut),
+    # fused into a single boolean operation.
+    slot_boxes: list[Part] = []
+    x_centers, _ = _slot_centers(lid_length, VENT_SLOT_LENGTH, VENT_MARGIN)
+    z = LID_HEIGHT - LID_TOP_THICKNESS / 2
+    for x_rel in x_centers:
+        slot_boxes.append(
+            Box(
+                VENT_SLOT_LENGTH,
+                VENT_SLOT_HEIGHT,
+                LID_TOP_THICKNESS + LID_SLOT_OVERCUT,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            ).moved(Location((left_x + x_rel, 0, z)))
+        )
+
+    return Part([lid.part.cut(*slot_boxes)])
 
 
 def make_lid_small() -> Part:
