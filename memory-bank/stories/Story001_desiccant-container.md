@@ -82,7 +82,7 @@ Add rectangular through-slots `5 mm long × 1 mm tall` (5 mm dimension horizonta
 
 Completion criteria: the container and lids carry the specified vent slots with 1 mm margins, absent from the bottom plate and divider; `python -m pytest` is green.
 
-### Task 4b: Add SILICA / ALUMINA floor embossing (test-first) — In Progress
+### Task 4b: Add SILICA / ALUMINA floor embossing (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Task 2 (and runs after 4a, sharing the same files).
 
