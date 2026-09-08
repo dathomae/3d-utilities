@@ -94,7 +94,7 @@ Add raised build123d `Text` — `SILICA` (~0.5 mm tall) on the interior floor of
 
 Completion criteria: `SILICA` and `ALUMINA` are embossed on the correct interior floors; `python -m pytest` is green.
 
-### Task 5: STEP-export CLI and PARTS dict (test-first) — Not Started
+### Task 5: STEP-export CLI and PARTS dict (test-first) — In Progress
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Tasks 2, 3, 4a, 4b.
 
