@@ -107,7 +107,7 @@ Add the `PARTS` dict keyed by name and a `main()` STEP-export CLI mirroring `src
 
 Completion criteria: `python -m pytest` is green; the CLI writes `desiccant_body.step`, `desiccant_lid_small.step`, and `desiccant_lid_large.step` into `manufacture/`.
 
-### Task 6: Utility README — In Progress
+### Task 6: Utility README — Completed
 
 Route: `technical-writer-for-story-implementor` (docs-only). Depends on Tasks 2–5 (describes the final geometry and CLI).
 
