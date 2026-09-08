@@ -17,6 +17,13 @@ Two separate lids close the compartments: each is a 2 mm top plate plus a
 a ``OOZE_CLEARANCE`` radial gap to the rim's outer face so the lids mate
 without binding.
 
+Ventilation: 5 x 1 mm rectangular through-slots (``VENT_SLOT_LENGTH`` x
+``VENT_SLOT_HEIGHT``) with 1 mm solid margins (``VENT_MARGIN``) perforate
+the four outer side walls of the body and both lids' top plates - never the
+bottom plate or the internal dividing wall.  Cutting boxes extend slightly
+past the faces they pierce (``VENT_OVERCUT``, ``LID_SLOT_OVERCUT``) so the
+booleans stay clean.
+
 The interior cavity is formed by offsetting each of the four outer faces
 inward by ``WALL_THICKNESS`` perpendicular to that face (a true polygon
 offset), so the slanted side walls - like the end walls - are exactly
@@ -65,6 +72,10 @@ VENT_SLOT_LENGTH = 5.0
 VENT_SLOT_HEIGHT = 1.0
 VENT_MARGIN = 1.0
 VENT_OVERCUT = 1.0
+# Lid slots use a smaller overcut than the body-wall slots so the cutting box
+# barely leaves the top plate: a larger overcut would notch the skirt wall
+# where the outermost slots meet it.
+LID_SLOT_OVERCUT = 0.4
 
 
 def _trapezoid_vertices(
@@ -228,7 +239,11 @@ def make_body() -> Part:
     4. step the top ``RIM_HEIGHT`` mm of every wall inward by ``RIM_INSET``:
        a ring around the outer perimeter (rim flush with the interior face,
        leaving a 2 mm exterior shelf) and two 2 mm shelves on the divider,
-       leaving the 4 mm centered divider rim ridge.
+       leaving the 4 mm centered divider rim ridge,
+    5. cut the vent slots (5 x 1 mm, 1 mm margins, see
+       ``_body_vent_slot_boxes``) through the four outer side walls in a
+       single fused boolean operation; the bottom plate and the internal
+       dividing wall carry no vents.
     """
     divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
     # The interior narrows toward the short end, so the divider must span the
@@ -293,6 +308,11 @@ def _make_lid(left_x: float, right_x: float) -> Part:
     inset from the outer footprint by ``RIM_INSET - OOZE_CLEARANCE`` so it
     clears the body's 2 mm rim by ``OOZE_CLEARANCE`` radially while the
     skirt's outer face stays flush with the body's outer face.
+
+    The top plate carries the vent slots (5 x 1 mm, 1 mm margins).  Their
+    cutting boxes extend just below the plate's underside by
+    ``LID_SLOT_OVERCUT`` (0.2 mm per side) for a clean boolean, which only
+    barely touches the skirt where the outermost slots meet it.
     """
     lid_length = right_x - left_x
     center_x = (left_x + right_x) / 2
@@ -326,7 +346,7 @@ def _make_lid(left_x: float, right_x: float) -> Part:
             Box(
                 VENT_SLOT_LENGTH,
                 VENT_SLOT_HEIGHT,
-                LID_TOP_THICKNESS + VENT_OVERCUT,
+                LID_TOP_THICKNESS + LID_SLOT_OVERCUT,
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             ).moved(Location((left_x + x_rel, 0, z)))
         )
