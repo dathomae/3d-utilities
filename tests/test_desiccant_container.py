@@ -1,14 +1,17 @@
-"""Tests for the desiccant_container body geometry (TDD test-first).
+"""Tests for the desiccant_container body, lids, vent slots, and floor embossing (TDD test-first).
 
 The body is a 185 x (65/75) x 13 mm trapezoidal tray: a 2 mm bottom plate,
 4 mm outer walls, a solid 8 mm internal dividing wall at 1/3 of the length
 from the short end, and a 2 mm rim stepped 2 mm into the top of every wall.
 Vent slots (5 x 1 mm, 1 mm margins) perforate the four outer side walls and
 both lids' top plates - never the bottom plate or the internal dividing wall.
+Two snap-fit lids cover the short and long chambers, and the bottom plate is
+embossed with "SILICA" and "ALUMINA" labels on the respective chambers.
 
-Wall, divider, and rim thicknesses are probed with small axis-aligned boxes
-boolean-intersected with the part: the intersection volume equals the probe
-volume when the probe lies entirely inside solid, and ~0 when in void.
+Wall, divider, rim, lid, and embossing properties are probed with small
+axis-aligned boxes boolean-intersected with the part: the intersection volume
+equals the probe volume when the probe lies entirely inside solid, and ~0 when
+in void.
 """
 
 import math
@@ -17,10 +20,13 @@ import pytest
 from build123d import Align, Box, Location, Part
 
 from desiccant_container import (
+    ALUMINA_LABEL,
     BODY_HEIGHT,
     BOTTOM_THICKNESS,
     DIVIDER_RATIO,
     DIVIDER_THICKNESS,
+    EMBOSS_FONT_SIZE,
+    EMBOSS_HEIGHT,
     LENGTH,
     LID_HEIGHT,
     LID_TOP_THICKNESS,
@@ -29,6 +35,7 @@ from desiccant_container import (
     RIM_HEIGHT,
     RIM_INSET,
     SHORT_END,
+    SILICA_LABEL,
     VENT_MARGIN,
     VENT_SLOT_HEIGHT,
     VENT_SLOT_LENGTH,
@@ -708,4 +715,76 @@ def test_divider_has_no_vent_slots():
     probe = _probe(DIVIDER_THICKNESS, 50, 7, (divider_center_x, 0, 3))
     assert _intersect_volume(body, probe) == pytest.approx(
         DIVIDER_THICKNESS * 50 * 7, abs=1e-5
+    )
+
+
+# --- Embossing tests ---
+
+
+def _emboss_probe_center_x(is_small: bool) -> float:
+    """X center of a probe over the embossed label on a compartment floor.
+
+    The label is centered between the inner face of the relevant end wall and
+    the inner face of the divider.
+    """
+    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    if is_small:
+        left = -LENGTH / 2 + WALL_THICKNESS
+        right = divider_center_x - DIVIDER_THICKNESS / 2
+    else:
+        left = divider_center_x + DIVIDER_THICKNESS / 2
+        right = LENGTH / 2 - WALL_THICKNESS
+    return (left + right) / 2
+
+
+def test_small_compartment_floor_is_embossed_with_silica():
+    """The small-compartment floor carries raised SILICA text."""
+    body = make_body()
+    x = _emboss_probe_center_x(is_small=True)
+    probe = _probe(40, 14, EMBOSS_HEIGHT, (x, 0, BOTTOM_THICKNESS))
+    shapes = _intersect_shapes(body, probe)
+    assert len(shapes) >= 1
+    top = max(s.bounding_box().max.Z for s in shapes)
+    assert top == pytest.approx(BOTTOM_THICKNESS + EMBOSS_HEIGHT, abs=0.05)
+
+
+def test_large_compartment_floor_is_embossed_with_alumina():
+    """The large-compartment floor carries raised ALUMINA text."""
+    body = make_body()
+    x = _emboss_probe_center_x(is_small=False)
+    probe = _probe(40, 14, EMBOSS_HEIGHT, (x, 0, BOTTOM_THICKNESS))
+    shapes = _intersect_shapes(body, probe)
+    assert len(shapes) >= 1
+    top = max(s.bounding_box().max.Z for s in shapes)
+    assert top == pytest.approx(BOTTOM_THICKNESS + EMBOSS_HEIGHT, abs=0.05)
+
+
+def test_embossing_does_not_exceed_emboss_height():
+    """No raised material exists above the intended emboss height."""
+    body = make_body()
+    for is_small in (True, False):
+        x = _emboss_probe_center_x(is_small)
+        probe = _probe(40, 14, 1.0, (x, 0, BOTTOM_THICKNESS + EMBOSS_HEIGHT))
+        assert _intersect_volume(body, probe) == pytest.approx(0, abs=1e-6)
+
+
+def test_embossing_is_confined_to_compartments():
+    """Raised labels stay on their own side of the divider."""
+    body = make_body()
+    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    # Probe just inside the small compartment, next to the divider: no ALUMINA.
+    small_side_x = divider_center_x - DIVIDER_THICKNESS / 2 - 5
+    probe_small_side = _probe(
+        5, 14, EMBOSS_HEIGHT, (small_side_x, 0, BOTTOM_THICKNESS)
+    )
+    # Probe just inside the large compartment, next to the divider: no SILICA.
+    large_side_x = divider_center_x + DIVIDER_THICKNESS / 2 + 5
+    probe_large_side = _probe(
+        5, 14, EMBOSS_HEIGHT, (large_side_x, 0, BOTTOM_THICKNESS)
+    )
+    assert _intersect_volume(body, probe_small_side) == pytest.approx(
+        0, abs=1e-6
+    )
+    assert _intersect_volume(body, probe_large_side) == pytest.approx(
+        0, abs=1e-6
     )

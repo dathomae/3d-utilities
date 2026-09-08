@@ -46,6 +46,7 @@ from build123d import (
     Plane,
     Polygon,
     Rectangle,
+    Text,
     Vector,
     extrude,
 )
@@ -76,6 +77,12 @@ VENT_OVERCUT = 1.0
 # barely leaves the top plate: a larger overcut would notch the skirt wall
 # where the outermost slots meet it.
 LID_SLOT_OVERCUT = 0.4
+
+# --- Embossing dimensions (mm) ---
+EMBOSS_HEIGHT = 0.5
+EMBOSS_FONT_SIZE = 10.0
+SILICA_LABEL = "SILICA"
+ALUMINA_LABEL = "ALUMINA"
 
 
 def _trapezoid_vertices(
@@ -296,7 +303,28 @@ def make_body() -> Part:
                     Rectangle(RIM_INSET, 2 * divider_half_span)
             extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
 
-    # 5. Vent slots on the four outer side walls (never on bottom/divider):
+        # 5. Emboss compartment labels on the interior floor (top of the bottom
+        #    plate), raised ~0.5 mm into each cavity so the compartments are
+        #    identifiable when opened for refill.
+        small_center_x = (
+            -LENGTH / 2 + WALL_THICKNESS
+            + divider_center_x
+            - DIVIDER_THICKNESS / 2
+        ) / 2
+        large_center_x = (
+            divider_center_x
+            + DIVIDER_THICKNESS / 2
+            + LENGTH / 2
+            - WALL_THICKNESS
+        ) / 2
+        with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
+            with Locations((small_center_x, 0)):
+                Text(SILICA_LABEL, font_size=EMBOSS_FONT_SIZE)
+            with Locations((large_center_x, 0)):
+                Text(ALUMINA_LABEL, font_size=EMBOSS_FONT_SIZE)
+        extrude(amount=EMBOSS_HEIGHT, mode=Mode.ADD)
+
+    # 6. Vent slots on the four outer side walls (never on bottom/divider):
     #    cut the fused slot tool from the tray in a single boolean operation.
     return Part([body.part.cut(*_body_vent_slot_boxes())])
 
