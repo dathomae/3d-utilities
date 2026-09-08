@@ -1,14 +1,17 @@
-"""Tests for the desiccant_container body geometry (TDD test-first).
+"""Tests for the desiccant_container body, lids, vent slots, and floor embossing (TDD test-first).
 
 The body is a 185 x (65/75) x 13 mm trapezoidal tray: a 2 mm bottom plate,
 4 mm outer walls, a solid 8 mm internal dividing wall at 1/3 of the length
 from the short end, and a 2 mm rim stepped 2 mm into the top of every wall.
 Vent slots (5 x 1 mm, 1 mm margins) perforate the four outer side walls and
 both lids' top plates - never the bottom plate or the internal dividing wall.
+Two snap-fit lids cover the short and long chambers, and the bottom plate is
+embossed with "SILICA" and "ALUMINA" labels on the respective chambers.
 
-Wall, divider, and rim thicknesses are probed with small axis-aligned boxes
-boolean-intersected with the part: the intersection volume equals the probe
-volume when the probe lies entirely inside solid, and ~0 when in void.
+Wall, divider, rim, lid, and embossing properties are probed with small
+axis-aligned boxes boolean-intersected with the part: the intersection volume
+equals the probe volume when the probe lies entirely inside solid, and ~0 when
+in void.
 """
 
 import math
