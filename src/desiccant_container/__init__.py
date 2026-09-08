@@ -1,8 +1,10 @@
 """Desiccant container utility: parametric two-compartment tray geometry.
 
-Exports the body builder (`make_body`), the two lid builders
-(`make_lid_small`, `make_lid_large`), the `PARTS` registry, the STEP-export
-CLI entry point (`main`), and module-level dimension parameters.
+Exports the body builder (`make_body`), the label-inlay builder
+(`make_labels`), the body-plus-labels assembly (`make_body_assembly`), the
+two lid builders (`make_lid_small`, `make_lid_large`), the `PARTS` registry,
+the STEP-export CLI entry point (`main`), and module-level dimension
+parameters.
 """
 
 __all__ = [
@@ -11,8 +13,8 @@ __all__ = [
     "BOTTOM_THICKNESS",
     "DIVIDER_RATIO",
     "DIVIDER_THICKNESS",
-    "EMBOSS_FONT_SIZE",
-    "EMBOSS_HEIGHT",
+    "LABEL_DEPTH",
+    "LABEL_FONT_SIZE",
     "LENGTH",
     "LID_HEIGHT",
     "LID_SLOT_OVERCUT",
@@ -32,6 +34,8 @@ __all__ = [
     "main",
     "make_assembly",
     "make_body",
+    "make_body_assembly",
+    "make_labels",
     "make_lid_large",
     "make_lid_small",
     "show_part",

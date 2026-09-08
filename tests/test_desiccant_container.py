@@ -1,17 +1,19 @@
-"""Tests for the desiccant_container body, lids, vent slots, and floor embossing (TDD test-first).
+"""Tests for the desiccant_container body, lids, vent slots, and label inlays (TDD test-first).
 
-The body is a 185 x (65/75) x 13 mm trapezoidal tray: a 2 mm bottom plate,
+The body is a 185 x (65/75) x 23 mm trapezoidal tray: a 2 mm bottom plate,
 4 mm outer walls, a solid 8 mm internal dividing wall at 1/3 of the length
-from the short end, and a 2 mm rim stepped 2 mm into the top of every wall.
-Vent slots (5 x 1 mm, 1 mm margins) perforate the four outer side walls and
-both lids' top plates - never the bottom plate or the internal dividing wall.
-Two snap-fit lids cover the short and long chambers, and the bottom plate is
-embossed with "SILICA" and "ALUMINA" labels on the respective chambers.
+from the short end, and a 12 mm rim stepped 2 mm into the top of every wall.
+Vent slots (5 x 1 mm, 1 mm margins) perforate the four outer side walls below
+the rim and both lids' top plates - never the bottom plate, the rim, or the
+internal dividing wall.
+Two snap-fit lids cover the short and long chambers, and the interior floor
+carries recessed "SILICA" and "ALUMINA" label inlays (a separate, contrasting
+part pressed flush into the floor).
 
-Wall, divider, rim, lid, and embossing properties are probed with small
-axis-aligned boxes boolean-intersected with the part: the intersection volume
-equals the probe volume when the probe lies entirely inside solid, and ~0 when
-in void.
+Wall, divider, rim, lid, vent-slot, and label-inlay properties are probed with
+small axis-aligned boxes boolean-intersected with the part: the intersection
+volume equals the probe volume when the probe lies entirely inside solid, and
+~0 when in void.
 """
 
 import math
@@ -25,8 +27,7 @@ from desiccant_container import (
     BOTTOM_THICKNESS,
     DIVIDER_RATIO,
     DIVIDER_THICKNESS,
-    EMBOSS_FONT_SIZE,
-    EMBOSS_HEIGHT,
+    LABEL_DEPTH,
     LENGTH,
     LID_HEIGHT,
     LID_TOP_THICKNESS,
@@ -41,9 +42,13 @@ from desiccant_container import (
     VENT_SLOT_LENGTH,
     WALL_THICKNESS,
     make_body,
+    make_body_assembly,
+    make_labels,
     make_lid_large,
     make_lid_small,
 )
+
+from desiccant_container.container import _slot_centers
 
 
 def _probe(width, depth, height, center):
@@ -93,7 +98,7 @@ def test_make_body_returns_part():
 
 
 def test_bounding_box_size():
-    """The body spans 185 (X) x 75 (Y) x 13 (Z) mm."""
+    """The body spans 185 (X) x 75 (Y) x 23 (Z) mm."""
     body = make_body()
     size = tuple(body.bounding_box().size)
     assert size == pytest.approx((LENGTH, LONG_END, BODY_HEIGHT))
@@ -111,7 +116,7 @@ def test_outer_wall_thickness():
     """The short-end wall is WALL_THICKNESS (4 mm) thick in X.
 
     The probe band is z in [6, 7] mm, a solid gap between the vent-slot rows
-    (which span z in [1,2], [3,4], [5,6], [7,8], [9,10], [11,12]).
+    (which span z in [1,2], [3,4], [5,6], [7,8], [9,10] below the rim).
     """
     body = make_body()
     probe = _probe(
@@ -208,10 +213,10 @@ def test_interior_cavity_hollow_with_solid_bottom():
     # Void in the small (silica) compartment, away from walls and divider.
     void_probe = _probe(35, 20, 7, (-62.5, 0, 6.5))
     assert _intersect_volume(body, void_probe) == pytest.approx(0, abs=1e-6)
-    # The bottom plate under the same footprint is solid BOTTOM_THICKNESS.
-    bottom_probe = _probe(35, 20, BOTTOM_THICKNESS, (-62.5, 0, 0))
+    # The bottom plate away from the label inlays is solid BOTTOM_THICKNESS.
+    bottom_probe = _probe(20, 20, BOTTOM_THICKNESS, (70, 0, 0))
     assert _intersect_volume(body, bottom_probe) == pytest.approx(
-        35 * 20 * BOTTOM_THICKNESS
+        20 * 20 * BOTTOM_THICKNESS
     )
 
 
@@ -278,48 +283,26 @@ def test_lids_are_separated_by_divider_rim_ridge():
     assert small_lid.bounding_box().max.X < large_lid.bounding_box().min.X
 
 
-def test_lid_small_top_plate_is_solid():
-    """The top 2 mm of the small lid is a solid plate over the compartment.
+def _lid_top_holes(lid: Part) -> list[object]:
+    """The inner wires (vent-slot holes) of the lid's top-plate surface."""
+    top = max(
+        (f for f in lid.faces() if f.normal_at().Z > 0.99),
+        key=lambda f: f.area,
+    )
+    return top.inner_wires()
 
-    The probe is offset in Y to avoid the 5 x 1 mm vent slots, which run
-    along the plate's centerline (Y in [-0.5, 0.5]).
+
+def test_lid_top_plates_have_a_grid_of_vent_slots():
+    """Both lids' top plates are perforated by a full-width grid of slots.
+
+    The slots must cover most of the lid width, not just a single centerline
+    row (which was the bug being fixed).
     """
-    lid = make_lid_small()
-    right_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO - (
-        DIVIDER_THICKNESS / 2 - RIM_INSET
-    )
-    center_x = (-LENGTH / 2 + right_x) / 2
-    probe = _probe(
-        20,
-        20,
-        LID_TOP_THICKNESS,
-        (center_x, 15, LID_HEIGHT - LID_TOP_THICKNESS),
-    )
-    assert _intersect_volume(lid, probe) == pytest.approx(
-        20 * 20 * LID_TOP_THICKNESS
-    )
-
-
-def test_lid_large_top_plate_is_solid():
-    """The top 2 mm of the large lid is a solid plate over the compartment.
-
-    The probe is offset in Y to avoid the 5 x 1 mm vent slots, which run
-    along the plate's centerline (Y in [-0.5, 0.5]).
-    """
-    lid = make_lid_large()
-    left_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO + (
-        DIVIDER_THICKNESS / 2 - RIM_INSET
-    )
-    center_x = (left_x + LENGTH / 2) / 2
-    probe = _probe(
-        20,
-        20,
-        LID_TOP_THICKNESS,
-        (center_x, 15, LID_HEIGHT - LID_TOP_THICKNESS),
-    )
-    assert _intersect_volume(lid, probe) == pytest.approx(
-        20 * 20 * LID_TOP_THICKNESS
-    )
+    for lid in (make_lid_small(), make_lid_large()):
+        holes = _lid_top_holes(lid)
+        assert len(holes) > 100
+        ys = [w.bounding_box().center().Y for w in holes]
+        assert max(ys) - min(ys) > 0.8 * lid.bounding_box().size.Y
 
 
 def test_lid_small_skirt_is_hollow():
@@ -612,99 +595,97 @@ def test_slanted_side_walls_have_vent_slots():
         )
 
 
-def _lid_slot_params(lid: Part) -> tuple[float, float, int, float]:
-    """Return (left_x, span, n_slots, gap) for the lid top-plate slots."""
+def _lid_slot_grid(lid: Part) -> list[tuple[float, float]]:
+    """Recompute the (x, y) vent-slot centers of a lid's top-plate grid."""
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    perp = math.sqrt(1 + slope * slope)
+    skirt_inset = RIM_INSET - OOZE_CLEARANCE
     bb = lid.bounding_box()
     left_x = bb.min.X
     span = bb.size.X
-    n, gap = _slot_count_and_gap(span)
-    return left_x, span, n, gap
+    x_centers, _ = _slot_centers(span, VENT_SLOT_LENGTH, VENT_MARGIN)
+    centers: list[tuple[float, float]] = []
+    for x_rel in x_centers:
+        x = left_x + x_rel
+        inner_half = _outer_half_width(x) - skirt_inset * perp
+        y_centers, _ = _slot_centers(
+            2 * inner_half, VENT_SLOT_HEIGHT, VENT_MARGIN
+        )
+        for y_rel in y_centers:
+            centers.append((x, y_rel - inner_half))
+    return centers
 
 
 def test_lid_small_top_plate_has_vent_slots():
-    """The small lid top plate carries 5 x 1 mm through-slots."""
+    """The small lid top plate carries a grid of 5 x 1 mm through-slots."""
     lid = make_lid_small()
-    left_x, span, n, gap = _lid_slot_params(lid)
-    first_x = left_x + VENT_MARGIN + VENT_SLOT_LENGTH / 2
+    centers = _lid_slot_grid(lid)
+    assert len(centers) > 100
     z = LID_HEIGHT - LID_TOP_THICKNESS / 2
 
-    # Void probe inside the first slot.
+    # A computed slot center is a through-hole (void).
+    x, y = centers[0]
     void_probe = Box(
         VENT_SLOT_LENGTH - 0.1,
         VENT_SLOT_HEIGHT - 0.1,
         LID_TOP_THICKNESS - 0.1,
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
-    ).moved(Location((first_x, 0, z)))
+    ).moved(Location((x, y, z)))
     assert _intersect_volume(lid, void_probe) == pytest.approx(0, abs=1e-5)
 
-    # Solid probe in the gap between the first two slots.
-    x_mid = first_x + VENT_SLOT_LENGTH / 2 + gap / 2
-    solid_probe = Box(
-        gap - 0.1,
-        VENT_SLOT_HEIGHT - 0.1,
-        LID_TOP_THICKNESS - 0.1,
-        align=(Align.CENTER, Align.CENTER, Align.CENTER),
-    ).moved(Location((x_mid, 0, z)))
-    expected = (gap - 0.1) * (VENT_SLOT_HEIGHT - 0.1) * (LID_TOP_THICKNESS - 0.1)
-    assert _intersect_volume(lid, solid_probe) == pytest.approx(expected, abs=1e-5)
-
-    # Edge-margin probe.
+    # The X-edge margin before the first column is solid plate.
+    left_x = lid.bounding_box().min.X
     edge_probe = Box(
         VENT_MARGIN - 0.1,
         VENT_SLOT_HEIGHT - 0.1,
         LID_TOP_THICKNESS - 0.1,
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
     ).moved(Location((left_x + VENT_MARGIN / 2, 0, z)))
-    expected_edge = (VENT_MARGIN - 0.1) * (VENT_SLOT_HEIGHT - 0.1) * (LID_TOP_THICKNESS - 0.1)
-    assert _intersect_volume(lid, edge_probe) == pytest.approx(expected_edge, abs=1e-5)
-
-    # The number of slots matches the expected count for the lid span.
-    assert n == int((span - VENT_MARGIN) // (VENT_SLOT_LENGTH + VENT_MARGIN))
+    expected = (
+        (VENT_MARGIN - 0.1)
+        * (VENT_SLOT_HEIGHT - 0.1)
+        * (LID_TOP_THICKNESS - 0.1)
+    )
+    assert _intersect_volume(lid, edge_probe) == pytest.approx(expected, abs=1e-5)
 
 
 def test_lid_large_top_plate_has_vent_slots():
-    """The large lid top plate carries 5 x 1 mm through-slots."""
+    """The large lid top plate carries a grid of 5 x 1 mm through-slots."""
     lid = make_lid_large()
-    left_x, span, n, gap = _lid_slot_params(lid)
-    first_x = left_x + VENT_MARGIN + VENT_SLOT_LENGTH / 2
+    centers = _lid_slot_grid(lid)
+    assert len(centers) > 100
     z = LID_HEIGHT - LID_TOP_THICKNESS / 2
 
+    x, y = centers[0]
     void_probe = Box(
         VENT_SLOT_LENGTH - 0.1,
         VENT_SLOT_HEIGHT - 0.1,
         LID_TOP_THICKNESS - 0.1,
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
-    ).moved(Location((first_x, 0, z)))
+    ).moved(Location((x, y, z)))
     assert _intersect_volume(lid, void_probe) == pytest.approx(0, abs=1e-5)
 
-    x_mid = first_x + VENT_SLOT_LENGTH / 2 + gap / 2
-    solid_probe = Box(
-        gap - 0.1,
-        VENT_SLOT_HEIGHT - 0.1,
-        LID_TOP_THICKNESS - 0.1,
-        align=(Align.CENTER, Align.CENTER, Align.CENTER),
-    ).moved(Location((x_mid, 0, z)))
-    expected = (gap - 0.1) * (VENT_SLOT_HEIGHT - 0.1) * (LID_TOP_THICKNESS - 0.1)
-    assert _intersect_volume(lid, solid_probe) == pytest.approx(expected, abs=1e-5)
-
+    left_x = lid.bounding_box().min.X
     edge_probe = Box(
         VENT_MARGIN - 0.1,
         VENT_SLOT_HEIGHT - 0.1,
         LID_TOP_THICKNESS - 0.1,
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
     ).moved(Location((left_x + VENT_MARGIN / 2, 0, z)))
-    expected_edge = (VENT_MARGIN - 0.1) * (VENT_SLOT_HEIGHT - 0.1) * (LID_TOP_THICKNESS - 0.1)
-    assert _intersect_volume(lid, edge_probe) == pytest.approx(expected_edge, abs=1e-5)
-
-    assert n == int((span - VENT_MARGIN) // (VENT_SLOT_LENGTH + VENT_MARGIN))
+    expected = (
+        (VENT_MARGIN - 0.1)
+        * (VENT_SLOT_HEIGHT - 0.1)
+        * (LID_TOP_THICKNESS - 0.1)
+    )
+    assert _intersect_volume(lid, edge_probe) == pytest.approx(expected, abs=1e-5)
 
 
 def test_bottom_plate_has_no_vent_slots():
-    """The bottom plate remains solid; no slots cut into it."""
+    """The bottom plate remains solid (away from label inlays); no slots cut it."""
     body = make_body()
-    probe = _probe(35, 20, BOTTOM_THICKNESS, (-62.5, 0, 0))
+    probe = _probe(20, 20, BOTTOM_THICKNESS, (70, 0, 0))
     assert _intersect_volume(body, probe) == pytest.approx(
-        35 * 20 * BOTTOM_THICKNESS, abs=1e-5
+        20 * 20 * BOTTOM_THICKNESS, abs=1e-5
     )
 
 
@@ -718,11 +699,11 @@ def test_divider_has_no_vent_slots():
     )
 
 
-# --- Embossing tests ---
+# --- Label inlay tests ---
 
 
-def _emboss_probe_center_x(is_small: bool) -> float:
-    """X center of a probe over the embossed label on a compartment floor.
+def _label_center_x(is_small: bool) -> float:
+    """X center of a label on a compartment floor.
 
     The label is centered between the inner face of the relevant end wall and
     the inner face of the divider.
@@ -737,54 +718,58 @@ def _emboss_probe_center_x(is_small: bool) -> float:
     return (left + right) / 2
 
 
-def test_small_compartment_floor_is_embossed_with_silica():
-    """The small-compartment floor carries raised SILICA text."""
+def test_labels_part_is_flush_with_the_floor():
+    """The labels span LABEL_DEPTH below the floor, with their top flush at it."""
+    labels = make_labels()
+    bb = labels.bounding_box()
+    assert bb.min.Z == pytest.approx(BOTTOM_THICKNESS - LABEL_DEPTH, abs=1e-6)
+    assert bb.max.Z == pytest.approx(BOTTOM_THICKNESS, abs=1e-6)
+
+
+def test_labels_have_glyphs_in_both_compartments():
+    """The labels part has lettering in both the small and large compartments."""
+    labels = make_labels()
+    small_x = _label_center_x(is_small=True)
+    large_x = _label_center_x(is_small=False)
+    xs = [s.bounding_box().center().X for s in labels.solids()]
+    assert any(abs(x - small_x) < 20 for x in xs)
+    assert any(abs(x - large_x) < 20 for x in xs)
+
+
+def test_labels_fill_the_floor_recesses():
+    """The labels exactly fill the recesses cut into the body floor (flush)."""
     body = make_body()
-    x = _emboss_probe_center_x(is_small=True)
-    probe = _probe(40, 14, EMBOSS_HEIGHT, (x, 0, BOTTOM_THICKNESS))
-    shapes = _intersect_shapes(body, probe)
-    assert len(shapes) >= 1
-    top = max(s.bounding_box().max.Z for s in shapes)
-    assert top == pytest.approx(BOTTOM_THICKNESS + EMBOSS_HEIGHT, abs=0.05)
-
-
-def test_large_compartment_floor_is_embossed_with_alumina():
-    """The large-compartment floor carries raised ALUMINA text."""
-    body = make_body()
-    x = _emboss_probe_center_x(is_small=False)
-    probe = _probe(40, 14, EMBOSS_HEIGHT, (x, 0, BOTTOM_THICKNESS))
-    shapes = _intersect_shapes(body, probe)
-    assert len(shapes) >= 1
-    top = max(s.bounding_box().max.Z for s in shapes)
-    assert top == pytest.approx(BOTTOM_THICKNESS + EMBOSS_HEIGHT, abs=0.05)
-
-
-def test_embossing_does_not_exceed_emboss_height():
-    """No raised material exists above the intended emboss height."""
-    body = make_body()
+    labels = make_labels()
     for is_small in (True, False):
-        x = _emboss_probe_center_x(is_small)
-        probe = _probe(40, 14, 1.0, (x, 0, BOTTOM_THICKNESS + EMBOSS_HEIGHT))
-        assert _intersect_volume(body, probe) == pytest.approx(0, abs=1e-6)
+        x = _label_center_x(is_small)
+        probe = _probe(30, 10, LABEL_DEPTH, (x, 0, BOTTOM_THICKNESS - LABEL_DEPTH))
+        full = 30 * 10 * LABEL_DEPTH
+        assert _intersect_volume(body, probe) + _intersect_volume(
+            labels, probe
+        ) == pytest.approx(full, rel=1e-3)
 
 
-def test_embossing_is_confined_to_compartments():
-    """Raised labels stay on their own side of the divider."""
-    body = make_body()
+def test_body_assembly_contains_body_and_labels():
+    """The body assembly holds the body and its labels as separate solids."""
+    assembly = make_body_assembly()
+    assert len(assembly.solids()) == len(make_body().solids()) + len(
+        make_labels().solids()
+    )
+
+
+def test_labels_are_confined_to_compartments():
+    """The label inlays stay on their own side of the divider."""
+    labels = make_labels()
     divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    # Probe just inside the small compartment, next to the divider: no ALUMINA.
-    small_side_x = divider_center_x - DIVIDER_THICKNESS / 2 - 5
-    probe_small_side = _probe(
-        5, 14, EMBOSS_HEIGHT, (small_side_x, 0, BOTTOM_THICKNESS)
+    small_max = max(
+        s.bounding_box().max.X
+        for s in labels.solids()
+        if s.bounding_box().center().X < 0
     )
-    # Probe just inside the large compartment, next to the divider: no SILICA.
-    large_side_x = divider_center_x + DIVIDER_THICKNESS / 2 + 5
-    probe_large_side = _probe(
-        5, 14, EMBOSS_HEIGHT, (large_side_x, 0, BOTTOM_THICKNESS)
+    large_min = min(
+        s.bounding_box().min.X
+        for s in labels.solids()
+        if s.bounding_box().center().X > 0
     )
-    assert _intersect_volume(body, probe_small_side) == pytest.approx(
-        0, abs=1e-6
-    )
-    assert _intersect_volume(body, probe_large_side) == pytest.approx(
-        0, abs=1e-6
-    )
+    assert small_max < divider_center_x
+    assert large_min > divider_center_x

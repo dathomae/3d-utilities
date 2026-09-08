@@ -6,8 +6,10 @@ from build123d import Compound, Part
 from desiccant_container.container import (
     BODY_HEIGHT,
     LENGTH,
+    LID_HEIGHT,
     LONG_END,
     PARTS,
+    RIM_HEIGHT,
     main,
     make_assembly,
     show_part,
@@ -22,18 +24,24 @@ STEP_NAMES = (
 
 
 def test_parts_registry_contains_three_parts():
-    """PARTS registers body, lid_small, and lid_large as build123d Parts."""
+    """PARTS registers body, lid_small, and lid_large; body is the assembly."""
     assert set(PARTS) == {"body", "lid_small", "lid_large"}
-    for part in PARTS.values():
-        assert isinstance(part, Part)
+    assert isinstance(PARTS["body"], Compound)  # body + label inlays
+    assert isinstance(PARTS["lid_small"], Part)
+    assert isinstance(PARTS["lid_large"], Part)
 
 
-def test_make_assembly_is_compound_of_parts():
-    """make_assembly() returns a Compound whose bounding box spans the body."""
+def test_make_assembly_positions_lids_on_top():
+    """make_assembly() returns the body, labels, and lids with the lids raised."""
     assembly = make_assembly()
-    assert isinstance(assembly, Compound)
-    size = tuple(assembly.bounding_box().size)
-    assert size == pytest.approx((LENGTH, LONG_END, BODY_HEIGHT))
+    assert isinstance(assembly, list)
+    assert len(assembly) == 4  # body, labels, small lid, large lid
+    bb = Compound(assembly).bounding_box()
+    # Lids are lifted by BODY_HEIGHT - RIM_HEIGHT so their skirts overlap the rim.
+    assert tuple(bb.size) == pytest.approx(
+        (LENGTH, LONG_END, BODY_HEIGHT - RIM_HEIGHT + LID_HEIGHT)
+    )
+    assert bb.min.Z == pytest.approx(0)
 
 
 def test_main_writes_three_step_files(tmp_path):

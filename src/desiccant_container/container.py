@@ -8,21 +8,22 @@ Y across width, Z up).  It holds two compartments of desiccant:
 * the large (alumina) compartment at the 75 mm long end.
 
 It consists of a 2 mm bottom plate, 4 mm outer walls, a solid 8 mm internal
-dividing wall (no vents) that keeps the two desiccants apart, and a 2 mm rim
-stepped 2 mm inward on the top of every wall (outer perimeter and divider).
-All dimensions are module-level parameters in millimetres.
+dividing wall (no vents) that keeps the two desiccants apart, and a
+``RIM_HEIGHT``-tall rim stepped ``RIM_INSET`` inward on the top of every wall
+(outer perimeter and divider).  All dimensions are module-level parameters in
+millimetres.
 
 Two separate lids close the compartments: each is a 2 mm top plate plus a
-2 mm skirt, with the skirt's outer face flush with the body's outer face and
-a ``OOZE_CLEARANCE`` radial gap to the rim's outer face so the lids mate
-without binding.
+``RIM_HEIGHT``-tall skirt, with the skirt's outer face flush with the body's
+outer face and a ``OOZE_CLEARANCE`` radial gap to the rim's outer face so the
+lids mate without binding.
 
 Ventilation: 5 x 1 mm rectangular through-slots (``VENT_SLOT_LENGTH`` x
 ``VENT_SLOT_HEIGHT``) with 1 mm solid margins (``VENT_MARGIN``) perforate
-the four outer side walls of the body and both lids' top plates - never the
-bottom plate or the internal dividing wall.  Cutting boxes extend slightly
-past the faces they pierce (``VENT_OVERCUT``, ``LID_SLOT_OVERCUT``) so the
-booleans stay clean.
+the four outer side walls below the rim and both lids' top plates - never the
+bottom plate, the rim, or the internal dividing wall.  Cutting boxes extend
+slightly past the faces they pierce (``VENT_OVERCUT``, ``LID_SLOT_OVERCUT``)
+so the booleans stay clean.
 
 The interior cavity is formed by offsetting each of the four outer faces
 inward by ``WALL_THICKNESS`` perpendicular to that face (a true polygon
@@ -30,6 +31,12 @@ offset), so the slanted side walls - like the end walls - are exactly
 ``WALL_THICKNESS`` thick measured normal to the face.  The same
 perpendicular offset (by ``RIM_INSET``) defines the rim step on the top of
 every wall.
+
+The two compartments are identified by ``SILICA`` and ``ALUMINA`` lettering
+inlaid flush into the interior floor.  The lettering is a separate part
+(``make_labels``) printed in a contrasting filament and pressed into matching
+``LABEL_DEPTH``-deep recesses cut into the bottom plate, so its top face
+sits level with the floor.
 """
 
 import argparse
@@ -49,6 +56,7 @@ from build123d import (
     Plane,
     Polygon,
     Rectangle,
+    Shape,
     Text,
     Vector,
     export_step,
@@ -59,16 +67,20 @@ from build123d import (
 LENGTH = 185.0
 SHORT_END = 65.0
 LONG_END = 75.0
-BODY_HEIGHT = 13.0
+BODY_HEIGHT = 23.0
 BOTTOM_THICKNESS = 2.0
 WALL_THICKNESS = 4.0
 DIVIDER_THICKNESS = 8.0
-RIM_HEIGHT = 2.0
+# The rim is the lip the lids grip.  The full-thickness wall below it is
+# ``BODY_HEIGHT - RIM_HEIGHT`` tall and carries the vent slots.
+RIM_HEIGHT = 12.0
 RIM_INSET = 2.0
 DIVIDER_RATIO = 1 / 3
 
 # --- Lid dimensions (mm) ---
-LID_HEIGHT = 4.0
+# The skirt is ``LID_HEIGHT - LID_TOP_THICKNESS`` tall and grips the full
+# ``RIM_HEIGHT`` of the rim.
+LID_HEIGHT = 14.0
 LID_TOP_THICKNESS = 2.0
 OOZE_CLEARANCE = 0.2
 
@@ -82,9 +94,9 @@ VENT_OVERCUT = 1.0
 # where the outermost slots meet it.
 LID_SLOT_OVERCUT = 0.4
 
-# --- Embossing dimensions (mm) ---
-EMBOSS_HEIGHT = 0.5
-EMBOSS_FONT_SIZE = 10.0
+# --- Label inlay dimensions (mm) ---
+LABEL_DEPTH = 0.8
+LABEL_FONT_SIZE = 10.0
 SILICA_LABEL = "SILICA"
 ALUMINA_LABEL = "ALUMINA"
 
@@ -171,13 +183,16 @@ def _body_vent_slot_boxes() -> list[Part]:
     The boxes are returned as a list of un-cut shapes so ``make_body`` can
     subtract them from the base tray in a single fused boolean operation
     (hundreds of sequential ``Mode.SUBTRACT`` boxes would take minutes).
-    Slots are not cut into the bottom plate or the internal dividing wall.
-    Each box extends slightly beyond the wall faces (``VENT_OVERCUT``) to
-    avoid coplanar boolean issues.
+    Slots perforate only the full-thickness wall below the rim (the rim the
+    lids grip is left solid), and never the bottom plate or the internal
+    dividing wall.  Each box extends slightly beyond the wall faces
+    (``VENT_OVERCUT``) to avoid coplanar boolean issues.
     """
     boxes: list[Part] = []
     overcut = VENT_OVERCUT
-    z_centers, _ = _slot_centers(BODY_HEIGHT, VENT_SLOT_HEIGHT, VENT_MARGIN)
+    z_centers, _ = _slot_centers(
+        BODY_HEIGHT - RIM_HEIGHT, VENT_SLOT_HEIGHT, VENT_MARGIN
+    )
     if not z_centers:
         return boxes
 
@@ -236,6 +251,22 @@ def _body_vent_slot_boxes() -> list[Part]:
     return boxes
 
 
+def _label_centers() -> tuple[float, float]:
+    """X centers of the SILICA (small) and ALUMINA (large) label inlays.
+
+    Each label is centered between the inner face of its end wall and the
+    inner face of the divider, on the interior floor.
+    """
+    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    small = (
+        -LENGTH / 2 + WALL_THICKNESS + divider_center_x - DIVIDER_THICKNESS / 2
+    ) / 2
+    large = (
+        divider_center_x + DIVIDER_THICKNESS / 2 + LENGTH / 2 - WALL_THICKNESS
+    ) / 2
+    return small, large
+
+
 def make_body() -> Part:
     """Return the desiccant container body as a build123d Part.
 
@@ -251,10 +282,12 @@ def make_body() -> Part:
        a ring around the outer perimeter (rim flush with the interior face,
        leaving a 2 mm exterior shelf) and two 2 mm shelves on the divider,
        leaving the 4 mm centered divider rim ridge,
-    5. cut the vent slots (5 x 1 mm, 1 mm margins, see
-       ``_body_vent_slot_boxes``) through the four outer side walls in a
-       single fused boolean operation; the bottom plate and the internal
-       dividing wall carry no vents.
+    5. cut ``LABEL_DEPTH``-deep recesses for the SILICA and ALUMINA label
+       inlays into the interior floor (see ``make_labels``),
+    6. cut the vent slots (5 x 1 mm, 1 mm margins, see
+       ``_body_vent_slot_boxes``) through the four outer side walls below the
+       rim in a single fused boolean operation; the bottom plate, the rim, and
+       the internal dividing wall carry no vents.
     """
     divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
     # The interior narrows toward the short end, so the divider must span the
@@ -307,29 +340,19 @@ def make_body() -> Part:
                     Rectangle(RIM_INSET, 2 * divider_half_span)
             extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
 
-        # 5. Emboss compartment labels on the interior floor (top of the bottom
-        #    plate), raised ~0.5 mm into each cavity so the compartments are
-        #    identifiable when opened for refill.
-        small_center_x = (
-            -LENGTH / 2 + WALL_THICKNESS
-            + divider_center_x
-            - DIVIDER_THICKNESS / 2
-        ) / 2
-        large_center_x = (
-            divider_center_x
-            + DIVIDER_THICKNESS / 2
-            + LENGTH / 2
-            - WALL_THICKNESS
-        ) / 2
+        # 5. Label-inlay recesses: cut LABEL_DEPTH-deep pockets for the
+        #    separate SILICA and ALUMINA inlay part into the interior floor.
+        small_center_x, large_center_x = _label_centers()
         with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
             with Locations((small_center_x, 0)):
-                Text(SILICA_LABEL, font_size=EMBOSS_FONT_SIZE)
+                Text(SILICA_LABEL, font_size=LABEL_FONT_SIZE)
             with Locations((large_center_x, 0)):
-                Text(ALUMINA_LABEL, font_size=EMBOSS_FONT_SIZE)
-        extrude(amount=EMBOSS_HEIGHT, mode=Mode.ADD)
+                Text(ALUMINA_LABEL, font_size=LABEL_FONT_SIZE)
+        extrude(amount=-LABEL_DEPTH, mode=Mode.SUBTRACT)
 
-    # 6. Vent slots on the four outer side walls (never on bottom/divider):
-    #    cut the fused slot tool from the tray in a single boolean operation.
+    # 6. Vent slots on the four outer side walls below the rim (never on the
+    #    bottom plate, the rim, or the divider): cut the fused slot tool from
+    #    the tray in a single boolean operation.
     return Part([body.part.cut(*_body_vent_slot_boxes())])
 
 
@@ -341,10 +364,11 @@ def _make_lid(left_x: float, right_x: float) -> Part:
     clears the body's 2 mm rim by ``OOZE_CLEARANCE`` radially while the
     skirt's outer face stays flush with the body's outer face.
 
-    The top plate carries the vent slots (5 x 1 mm, 1 mm margins).  Their
-    cutting boxes extend just below the plate's underside by
-    ``LID_SLOT_OVERCUT`` (0.2 mm per side) for a clean boolean, which only
-    barely touches the skirt where the outermost slots meet it.
+    The top plate carries a grid of vent slots (5 x 1 mm, 1 mm margins):
+    columns run along the lid's length and rows across its width, following
+    the taper so the grid covers the whole top while staying clear of the
+    skirt.  Each slot's cutting box extends just past the plate's underside
+    by ``LID_SLOT_OVERCUT`` for a clean boolean.
     """
     lid_length = right_x - left_x
     center_x = (left_x + right_x) / 2
@@ -369,19 +393,31 @@ def _make_lid(left_x: float, right_x: float) -> Part:
         extrude(amount=LID_HEIGHT - LID_TOP_THICKNESS, mode=Mode.SUBTRACT)
 
     # Vent slots on the top plate (5 x 1 mm, 1 mm margins, through-cut),
-    # fused into a single boolean operation.
+    # arranged as a grid: one row of slots across the width for every column
+    # along the length.  Rows follow the lid's taper (the interior width
+    # inside the skirt shrinks toward the short end), so the grid covers the
+    # whole top without cutting into the skirt.  All slot boxes are fused
+    # into a single boolean operation.
     slot_boxes: list[Part] = []
     x_centers, _ = _slot_centers(lid_length, VENT_SLOT_LENGTH, VENT_MARGIN)
     z = LID_HEIGHT - LID_TOP_THICKNESS / 2
+    perp = math.sqrt(1 + ((LONG_END - SHORT_END) / (2 * LENGTH)) ** 2)
     for x_rel in x_centers:
-        slot_boxes.append(
-            Box(
-                VENT_SLOT_LENGTH,
-                VENT_SLOT_HEIGHT,
-                LID_TOP_THICKNESS + LID_SLOT_OVERCUT,
-                align=(Align.CENTER, Align.CENTER, Align.CENTER),
-            ).moved(Location((left_x + x_rel, 0, z)))
+        x = left_x + x_rel
+        # Half-width of the top-plate region inside the skirt at this X.
+        inner_half = _outer_half_width(x) - skirt_inset * perp
+        y_centers, _ = _slot_centers(
+            2 * inner_half, VENT_SLOT_HEIGHT, VENT_MARGIN
         )
+        for y_rel in y_centers:
+            slot_boxes.append(
+                Box(
+                    VENT_SLOT_LENGTH,
+                    VENT_SLOT_HEIGHT,
+                    LID_TOP_THICKNESS + LID_SLOT_OVERCUT,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                ).moved(Location((x, y_rel - inner_half, z)))
+            )
 
     return Part([lid.part.cut(*slot_boxes)])
 
@@ -400,9 +436,40 @@ def make_lid_large() -> Part:
     return _make_lid(left_x, LENGTH / 2)
 
 
+def make_labels() -> Part:
+    """Return the SILICA and ALUMINA label inlays as a part.
+
+    The labels are printed in a contrasting filament and pressed into the
+    matching ``LABEL_DEPTH``-deep recesses cut into the body's interior
+    floor.  Each glyph is ``LABEL_DEPTH`` tall with its top face level with
+    the floor (Z = ``BOTTOM_THICKNESS``).  They are exported inside the body
+    assembly (``make_body_assembly``) rather than as their own STEP file.
+    """
+    small_center_x, large_center_x = _label_centers()
+    with BuildPart() as labels:
+        with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS - LABEL_DEPTH)):
+            with Locations((small_center_x, 0)):
+                Text(SILICA_LABEL, font_size=LABEL_FONT_SIZE)
+            with Locations((large_center_x, 0)):
+                Text(ALUMINA_LABEL, font_size=LABEL_FONT_SIZE)
+        extrude(amount=LABEL_DEPTH)
+    return labels.part
+
+
+def make_body_assembly() -> Compound:
+    """Return the body plus its label inlays as a single multi-material part.
+
+    The labels stay as separate solids (not fused to the body) so a slicing
+    tool can assign them a contrasting filament.  The body and labels are
+    exported together in one STEP file (``desiccant_body.step``).
+    """
+    return Compound([make_body(), make_labels()])
+
+
 #: The parts this module builds, keyed by the name a `--show` call uses.
-PARTS: dict[str, Part] = {
-    "body": make_body(),
+#: ``body`` is the body-plus-labels assembly; the lids are single parts.
+PARTS: dict[str, Shape] = {
+    "body": make_body_assembly(),
     "lid_small": make_lid_small(),
     "lid_large": make_lid_large(),
 }
@@ -416,9 +483,22 @@ _STEP_NAMES: dict[str, str] = {
 }
 
 
-def make_assembly() -> Compound:
-    """Return the entire assembly of parts as a single build123d Compound."""
-    return Compound(list(PARTS.values()))
+def make_assembly() -> list[Part]:
+    """Return the assembled container as a list of separately positioned parts.
+
+    The body sits at the origin, the label inlays sit in the floor at their
+    natural positions, and each lid is raised so its skirt overlaps the rim
+    (lifted by ``BODY_HEIGHT - RIM_HEIGHT``).  The parts are returned
+    individually (not fused into a ``Compound``) so the viewer can show them
+    as distinct, selectable objects.
+    """
+    lift = Location((0, 0, BODY_HEIGHT - RIM_HEIGHT))
+    return [
+        make_body(),
+        make_labels(),
+        make_lid_small().moved(lift),
+        make_lid_large().moved(lift),
+    ]
 
 
 def show_part(name: str) -> None:
@@ -430,7 +510,10 @@ def show_part(name: str) -> None:
     from ocp_vscode import show
 
     if name == "assembly":
-        show(make_assembly())
+        show(
+            *make_assembly(),
+            names=["body", "labels", "lid_small", "lid_large"],
+        )
     else:
         show(PARTS[name])
 
