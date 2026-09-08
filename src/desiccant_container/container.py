@@ -32,13 +32,16 @@ perpendicular offset (by ``RIM_INSET``) defines the rim step on the top of
 every wall.
 """
 
+import argparse
 import math
+from pathlib import Path
 
 from build123d import (
     Align,
     Box,
     BuildPart,
     BuildSketch,
+    Compound,
     Location,
     Locations,
     Mode,
@@ -48,6 +51,7 @@ from build123d import (
     Rectangle,
     Text,
     Vector,
+    export_step,
     extrude,
 )
 
@@ -394,3 +398,79 @@ def make_lid_large() -> Part:
     divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
     left_x = divider_center_x + (DIVIDER_THICKNESS / 2 - RIM_INSET)
     return _make_lid(left_x, LENGTH / 2)
+
+
+#: The parts this module builds, keyed by the name a `--show` call uses.
+PARTS: dict[str, Part] = {
+    "body": make_body(),
+    "lid_small": make_lid_small(),
+    "lid_large": make_lid_large(),
+}
+
+
+#: Mapping from part registry name to the STEP file name written by ``main``.
+_STEP_NAMES: dict[str, str] = {
+    "body": "desiccant_body.step",
+    "lid_small": "desiccant_lid_small.step",
+    "lid_large": "desiccant_lid_large.step",
+}
+
+
+def make_assembly() -> Compound:
+    """Return the entire assembly of parts as a single build123d Compound."""
+    return Compound(list(PARTS.values()))
+
+
+def show_part(name: str) -> None:
+    """Show a part by name, or the full assembly, in the ocp_vscode viewer."""
+    if name != "assembly" and name not in PARTS:
+        known = ", ".join(sorted(PARTS)) + ", or assembly"
+        raise SystemExit(f"unknown part {name!r}; choose from: {known}")
+
+    from ocp_vscode import show
+
+    if name == "assembly":
+        show(make_assembly())
+    else:
+        show(PARTS[name])
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Export the desiccant container parts to STEP files and optionally show one."""
+    parser = argparse.ArgumentParser(
+        description="Export the desiccant container parts to STEP files."
+    )
+    parser.add_argument(
+        "-o",
+        "--outdir",
+        default="manufacture",
+        help="Output directory for the STEP files (default: manufacture)",
+    )
+    parser.add_argument(
+        "--show",
+        nargs="?",
+        const="body",
+        metavar="PART",
+        help="Show a part (or 'assembly') in ocp_vscode after export; "
+        "with no value, shows the primary part (default: body)",
+    )
+    args = parser.parse_args(argv)
+
+    if args.show and args.show != "assembly" and args.show not in PARTS:
+        known = ", ".join(sorted(PARTS)) + ", or assembly"
+        parser.error(f"unknown part {args.show!r}; choose from: {known}")
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    for name, part in PARTS.items():
+        outpath = outdir / _STEP_NAMES[name]
+        export_step(part, str(outpath))
+        print(f"wrote {outpath}")
+
+    if args.show:
+        show_part(args.show)
+
+
+if __name__ == "__main__":
+    main()

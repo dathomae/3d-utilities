@@ -94,16 +94,16 @@ Add raised build123d `Text` — `SILICA` (~0.5 mm tall) on the interior floor of
 
 Completion criteria: `SILICA` and `ALUMINA` are embossed on the correct interior floors; `python -m pytest` is green.
 
-### Task 5: STEP-export CLI and PARTS dict (test-first) — In Progress
+### Task 5: STEP-export CLI and PARTS dict (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Tasks 2, 3, 4a, 4b.
 
 Add the `PARTS` dict keyed by name and a `main()` STEP-export CLI mirroring `src/scaffold/example.py` (`-o/--outdir` defaulting to `manufacture`, and `--show`). Exporting writes three files: `desiccant_body.step`, `desiccant_lid_small.step`, `desiccant_lid_large.step`.
 
-   a. Add the `PARTS` dict registering `body`, `lid_small`, and `lid_large` — Not Started
-   b. Implement `main()` (argparse `-o/--outdir`, `--show`) in `src/desiccant_container/container.py`, exporting the three parts to the outdir — Not Started
-   c. Write CLI/export tests first where practical: running the CLI writes the three `.step` files into `manufacture/` (use a temp dir in tests) — Not Started
-   d. Run `python -m pytest` and confirm running the CLI (`python -m desiccant_container.container`) writes all three `.step` files — Not Started
+   a. Add the `PARTS` dict registering `body`, `lid_small`, and `lid_large` — Completed
+   b. Implement `main()` (argparse `-o/--outdir`, `--show`) in `src/desiccant_container/container.py`, exporting the three parts to the outdir — Completed
+   c. Write CLI/export tests first where practical: running the CLI writes the three `.step` files into `manufacture/` (use a temp dir in tests) — Completed
+   d. Run `python -m pytest` and confirm running the CLI (`python -m desiccant_container.container`) writes all three `.step` files — Completed
 
 Completion criteria: `python -m pytest` is green; the CLI writes `desiccant_body.step`, `desiccant_lid_small.step`, and `desiccant_lid_large.step` into `manufacture/`.
 
