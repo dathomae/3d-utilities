@@ -54,3 +54,7 @@ def __getattr__(name: str):
         raise AttributeError(
             f"module 'desiccant_container' has no attribute {name!r}"
         ) from exc
+
+
+def __dir__():
+    return sorted(set(__all__) | {name for name in globals() if not name.startswith("_")})
