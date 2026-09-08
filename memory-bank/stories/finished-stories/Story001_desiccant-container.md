@@ -30,7 +30,7 @@ None.
 - Task 4b (embossing) was evaluated as borderline-small but is routed to `code-for-story-implementor` per the when-in-doubt rule (build123d `Text` placement and extrusion onto a face have non-obvious API details that a limited-context agent may not resolve).
 - Writing tasks (1, 6) route to `technical-writer-for-story-implementor`.
 
-### Task 1: Document the per-utility directory convention — Not Started
+### Task 1: Document the per-utility directory convention — Completed
 
 Route: `technical-writer-for-story-implementor` (docs-only; no TDD).
 
@@ -44,7 +44,7 @@ Update the repository documentation so that each utility is consistently describ
 
 Completion criteria: all five files state the per-directory convention; a grep for the stale "one module under `src/scaffold/`" phrasing returns no matches (the `scaffold` package may still be mentioned as the grandfathered placeholder).
 
-### Task 2: Body geometry (test-first) — Not Started
+### Task 2: Body geometry (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle: write tests, then implement).
 
@@ -57,7 +57,7 @@ Create the `src/desiccant_container/` package and implement `make_body()`, the t
 
 Completion criteria: `make_body()` returns a valid `Part` meeting the assertions above; `python -m pytest` is green.
 
-### Task 3: Lid geometry (test-first) — Not Started
+### Task 3: Lid geometry (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Task 2 (body rim geometry).
 
@@ -70,7 +70,7 @@ Implement `make_lid_small()` (covers the 65 mm silica compartment) and `make_lid
 
 Completion criteria: both lid builders return valid `Part`s that mate with the body's rim at the specified 0.2 mm clearance; `python -m pytest` is green.
 
-### Task 4a: Add vent slots to the body walls and lid top plates (test-first) — Not Started
+### Task 4a: Add vent slots to the body walls and lid top plates (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Tasks 2 and 3.
 
@@ -82,7 +82,7 @@ Add rectangular through-slots `5 mm long × 1 mm tall` (5 mm dimension horizonta
 
 Completion criteria: the container and lids carry the specified vent slots with 1 mm margins, absent from the bottom plate and divider; `python -m pytest` is green.
 
-### Task 4b: Add SILICA / ALUMINA floor embossing (test-first) — Not Started
+### Task 4b: Add SILICA / ALUMINA floor embossing (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Task 2 (and runs after 4a, sharing the same files).
 
@@ -94,20 +94,20 @@ Add raised build123d `Text` — `SILICA` (~0.5 mm tall) on the interior floor of
 
 Completion criteria: `SILICA` and `ALUMINA` are embossed on the correct interior floors; `python -m pytest` is green.
 
-### Task 5: STEP-export CLI and PARTS dict (test-first) — Not Started
+### Task 5: STEP-export CLI and PARTS dict (test-first) — Completed
 
 Route: `code-for-story-implementor` (Logical TDD Lifecycle). Depends on Tasks 2, 3, 4a, 4b.
 
 Add the `PARTS` dict keyed by name and a `main()` STEP-export CLI mirroring `src/scaffold/example.py` (`-o/--outdir` defaulting to `manufacture`, and `--show`). Exporting writes three files: `desiccant_body.step`, `desiccant_lid_small.step`, `desiccant_lid_large.step`.
 
-   a. Add the `PARTS` dict registering `body`, `lid_small`, and `lid_large` — Not Started
-   b. Implement `main()` (argparse `-o/--outdir`, `--show`) in `src/desiccant_container/container.py`, exporting the three parts to the outdir — Not Started
-   c. Write CLI/export tests first where practical: running the CLI writes the three `.step` files into `manufacture/` (use a temp dir in tests) — Not Started
-   d. Run `python -m pytest` and confirm running the CLI (`python -m desiccant_container.container`) writes all three `.step` files — Not Started
+   a. Add the `PARTS` dict registering `body`, `lid_small`, and `lid_large` — Completed
+   b. Implement `main()` (argparse `-o/--outdir`, `--show`) in `src/desiccant_container/container.py`, exporting the three parts to the outdir — Completed
+   c. Write CLI/export tests first where practical: running the CLI writes the three `.step` files into `manufacture/` (use a temp dir in tests) — Completed
+   d. Run `python -m pytest` and confirm running the CLI (`python -m desiccant_container.container`) writes all three `.step` files — Completed
 
 Completion criteria: `python -m pytest` is green; the CLI writes `desiccant_body.step`, `desiccant_lid_small.step`, and `desiccant_lid_large.step` into `manufacture/`.
 
-### Task 6: Utility README — Not Started
+### Task 6: Utility README — Completed
 
 Route: `technical-writer-for-story-implementor` (docs-only). Depends on Tasks 2–5 (describes the final geometry and CLI).
 
