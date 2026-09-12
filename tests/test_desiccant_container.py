@@ -1,19 +1,20 @@
 """Tests for the desiccant_container body, lids, vent slots, and label inlays (TDD test-first).
 
-The body is a 185 x (65/75) x 23 mm trapezoidal tray: a 2 mm bottom plate,
-4 mm outer walls, a solid 8 mm internal dividing wall at 1/3 of the length
-from the short end, and a 12 mm rim stepped 2 mm into the top of every wall.
-Vent slots (5 x 1 mm, 1 mm margins) perforate the four outer side walls below
-the rim and both lids' top plates - never the bottom plate, the rim, or the
-internal dividing wall.
+The body is a monolithic 185 x (65/75) mm base plate with two independent
+trapezoidal containers rising from it.  Each container has 4 mm walls on all
+four sides, a full-perimeter 12 mm rim stepped 2 mm inward, and a 2 mm bottom
+plate.  The containers are separated by a 5 mm gap centred at 1/3 of the
+length from the short end.  Vent slots (5 x 1 mm, 1 mm margins) perforate all
+four side walls of each container below the rim and both lids' top plates -
+never the bottom plate or the rim.
 Two snap-fit lids cover the short and long chambers, and the interior floor
 carries recessed "SILICA" and "ALUMINA" label inlays (a separate, contrasting
 part pressed flush into the floor).
 
-Wall, divider, rim, lid, vent-slot, and label-inlay properties are probed with
-small axis-aligned boxes boolean-intersected with the part: the intersection
-volume equals the probe volume when the probe lies entirely inside solid, and
-~0 when in void.
+Wall, rim, lid, vent-slot, and label-inlay properties are probed with small
+axis-aligned boxes boolean-intersected with the part: the intersection volume
+equals the probe volume when the probe lies entirely inside solid, and ~0 when
+in void.
 """
 
 import math
@@ -26,7 +27,6 @@ from desiccant_container import (
     BODY_HEIGHT,
     BOTTOM_THICKNESS,
     DIVIDER_RATIO,
-    DIVIDER_THICKNESS,
     LABEL_DEPTH,
     LENGTH,
     LID_HEIGHT,
@@ -48,8 +48,50 @@ from desiccant_container import (
     make_lid_small,
 )
 
-from desiccant_container.container import _slot_centers
+from desiccant_container.container import GAP, _slot_centers
 
+
+# ---------------------------------------------------------------------------
+# Geometry helpers (local copies of container.py functions for test use)
+# ---------------------------------------------------------------------------
+
+def _wall_angle() -> float:
+    """Angle (radians) of the slanted side walls relative to the X axis."""
+    return math.atan2(LONG_END - SHORT_END, 2 * LENGTH)
+
+
+def _outer_half_width(x: float) -> float:
+    """Half-width of the body's outer trapezoid at a given X, in mm."""
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    return SHORT_END / 2 + slope * (x + LENGTH / 2)
+
+
+def _interior_half_width(x: float) -> float:
+    """Half-width of a container's interior cavity at a given X, in mm."""
+    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
+    perp = math.sqrt(1 + slope * slope)
+    outer_half = SHORT_END / 2 + slope * (x + LENGTH / 2)
+    return outer_half - WALL_THICKNESS * perp
+
+
+def _gap_center_x() -> float:
+    """X coordinate of the gap midpoint between the two containers."""
+    return -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+
+
+def _small_outer_right_x() -> float:
+    """Outer-face X of the small container's right wall."""
+    return _gap_center_x() - GAP / 2
+
+
+def _large_outer_left_x() -> float:
+    """Outer-face X of the large container's left wall."""
+    return _gap_center_x() + GAP / 2
+
+
+# ---------------------------------------------------------------------------
+# Probe helpers
+# ---------------------------------------------------------------------------
 
 def _probe(width, depth, height, center):
     """Return an axis-aligned probe Box at ``center`` with its base at Z=0."""
@@ -76,18 +118,9 @@ def _intersect_volume(body, probe):
     return sum(shape.volume for shape in _intersect_shapes(body, probe))
 
 
-def _outer_half_width(x: float) -> float:
-    """Half-width of the body's outer trapezoid at a given X, in mm."""
-    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
-    return SHORT_END / 2 + slope * (x + LENGTH / 2)
-
-
-def _interior_half_width(x: float) -> float:
-    """Half-width of the body's interior cavity at a given X, in mm."""
-    slope = (LONG_END - SHORT_END) / (2 * LENGTH)
-    perp = math.sqrt(1 + slope * slope)
-    outer_half = SHORT_END / 2 + slope * (x + LENGTH / 2)
-    return outer_half - WALL_THICKNESS * perp
+# ======================================================================
+# Body geometry tests
+# ======================================================================
 
 
 def test_make_body_returns_part():
@@ -105,7 +138,7 @@ def test_bounding_box_size():
 
 
 def test_body_centered_on_origin():
-    """The trapezoid is centered on the origin, sitting on the Z=0 plane."""
+    """The trapezoid is centred on the origin, sitting on the Z=0 plane."""
     body = make_body()
     bb = body.bounding_box()
     assert tuple(bb.min) == pytest.approx((-LENGTH / 2, -LONG_END / 2, 0))
@@ -128,37 +161,47 @@ def test_outer_wall_thickness():
 
 
 def test_side_wall_thickness_at_midpoint():
-    """The side wall is solid at mid-length between the two vent-slot rows."""
+    """The large container's side wall is solid between vent-slot columns.
+
+    The probe targets a solid region between two adjacent slanted side-wall
+    vent slots on the large container (at X = 3.5, the midpoint of the gap
+    between the 5th and 6th slot columns)."""
     body = make_body()
-    # At x=0 the wall spans Y in [31, 35]; probe Y in [32, 34].  The probe is
-    # 0.8 mm wide in X, fully inside the 1.14 mm solid gap between the slanted
-    # side-wall vent rows that straddle x=0.
-    probe = _probe(0.8, 2, 7, (0, LONG_END / 2 - 4.5, 3))
+    # At x=3.5 the large container's side wall spans Y in [~31.1, ~35.1].
+    probe = _probe(0.8, 2, 7, (3.5, LONG_END / 2 - 4, 3))
     assert _intersect_volume(body, probe) == pytest.approx(0.8 * 2 * 7)
 
 
-def test_divider_thickness_and_position():
-    """The divider is DIVIDER_THICKNESS (8 mm) thick, with its centerline at
-    DIVIDER_RATIO (1/3) of LENGTH from the short end's outer face."""
+def test_gap_between_containers():
+    """The two containers are separated by a GAP (5 mm) air gap between
+    their adjacent outer wall faces, centred at DIVIDER_RATIO from the
+    short end."""
     body = make_body()
-    probe = _probe(20, 2, 7, (-30, 0, 3))  # X in [-40, -20] on the centerline
-    section = _intersect_shapes(body, probe)
-    assert len(section) == 1  # a single solid chunk: the divider
-    bb = section[0].bounding_box()
-    assert bb.size.X == pytest.approx(DIVIDER_THICKNESS)
-    center_x = (bb.min.X + bb.max.X) / 2
-    assert center_x - (-LENGTH / 2) == pytest.approx(LENGTH * DIVIDER_RATIO)
+    gap_center = _gap_center_x()
+    # Probe the 5 mm gap region between the two container outer faces.
+    probe = _probe(GAP, 30, 7, (gap_center, 0, 3))
+    assert _intersect_volume(body, probe) == pytest.approx(0, abs=1e-6)
 
 
-def test_divider_is_solid_across_the_interior():
-    """The divider fills the whole interior width, so the two compartments
-    cannot communicate through it."""
+def test_containers_have_independent_walls():
+    """Both containers have their own 4 mm wall at the inner (gap-facing)
+    edge.  The small container's right wall and large container's left wall
+    should each be solid, confirming the divider has been replaced by
+    independent walls.
+
+    The probe targets a solid Z band between vent-slot rows (Z = 2.5,
+    between the 2 mm and 3 mm rows), where the entire wall is solid at all
+    Y positions.
+    """
     body = make_body()
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    probe = _probe(DIVIDER_THICKNESS, 50, 7, (divider_center_x, 0, 3))
-    assert _intersect_volume(body, probe) == pytest.approx(
-        DIVIDER_THICKNESS * 50 * 7
-    )
+    small_right_wall_x = _small_outer_right_x() - WALL_THICKNESS / 2
+    large_left_wall_x = _large_outer_left_x() + WALL_THICKNESS / 2
+
+    for wall_x in (small_right_wall_x, large_left_wall_x):
+        probe = _probe(WALL_THICKNESS, 20, 0.5, (wall_x, 0, 2.5))
+        assert _intersect_volume(body, probe) == pytest.approx(
+            WALL_THICKNESS * 20 * 0.5, rel=1e-3
+        )
 
 
 def test_rim_thickness():
@@ -184,33 +227,58 @@ def test_rim_thickness():
     assert _intersect_volume(body, shelf_probe) == pytest.approx(0, abs=1e-6)
 
 
-def test_divider_rim_ridge_and_shelves():
-    """The divider's top has a 4 mm centered rim ridge and 2 mm shelves."""
+def test_each_container_has_full_perimeter_rim():
+    """Both containers have a full-perimeter rim on all four walls
+    (no shared divider ridge).  Probe the rim on the inner (gap-facing)
+    wall of each container.
+
+    The rim is the 2 mm band on the INTERIOR side of each wall
+    (the RIM_INSET outer ring is cut away, leaving the inner 2 mm).
+    """
     body = make_body()
-    center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    ridge_probe = _probe(
-        DIVIDER_THICKNESS - 2 * RIM_INSET,
-        40,
-        RIM_HEIGHT,
-        (center_x, 0, BODY_HEIGHT - RIM_HEIGHT),
+
+    # Small container: right-wall rim is inset 2 mm from outer face,
+    # occupying the interior side of the wall.
+    small_right_outer = _small_outer_right_x()
+    # Rim spans: [outer - WALL_THICKNESS, outer - WALL_THICKNESS + RIM_INSET]
+    #           = [-37.333, -35.333]
+    rim_center_x = small_right_outer - WALL_THICKNESS + RIM_INSET / 2
+    probe = _probe(
+        RIM_INSET,
+        20,
+        1,
+        (rim_center_x, 0, BODY_HEIGHT - 1),
     )
-    assert _intersect_volume(body, ridge_probe) == pytest.approx(
-        (DIVIDER_THICKNESS - 2 * RIM_INSET) * 40 * RIM_HEIGHT
-    )
+    assert _intersect_volume(body, probe) == pytest.approx(RIM_INSET * 20 * 1)
+
+    # Small container: right-wall exterior shelf is cut away (void).
+    shelf_center_x = small_right_outer - RIM_INSET / 2
     shelf_probe = _probe(
         RIM_INSET,
-        40,
+        20,
         RIM_HEIGHT,
-        (center_x - DIVIDER_THICKNESS / 2 + RIM_INSET / 2, 0,
-         BODY_HEIGHT - RIM_HEIGHT),
+        (shelf_center_x, 0, BODY_HEIGHT - RIM_HEIGHT),
     )
     assert _intersect_volume(body, shelf_probe) == pytest.approx(0, abs=1e-6)
+
+    # Large container: left-wall rim.
+    large_left_outer = _large_outer_left_x()
+    # Rim spans: [outer + WALL_THICKNESS - RIM_INSET, outer + WALL_THICKNESS]
+    #           = [-26.333, -24.333]
+    rim_center2 = large_left_outer + WALL_THICKNESS - RIM_INSET / 2
+    probe2 = _probe(
+        RIM_INSET,
+        20,
+        1,
+        (rim_center2, 0, BODY_HEIGHT - 1),
+    )
+    assert _intersect_volume(body, probe2) == pytest.approx(RIM_INSET * 20 * 1)
 
 
 def test_interior_cavity_hollow_with_solid_bottom():
     """The interior is a hollow basin sealed by a 2 mm bottom plate."""
     body = make_body()
-    # Void in the small (silica) compartment, away from walls and divider.
+    # Void in the small (silica) compartment, away from walls.
     void_probe = _probe(35, 20, 7, (-62.5, 0, 6.5))
     assert _intersect_volume(body, void_probe) == pytest.approx(0, abs=1e-6)
     # The bottom plate away from the label inlays is solid BOTTOM_THICKNESS.
@@ -221,10 +289,10 @@ def test_interior_cavity_hollow_with_solid_bottom():
 
 
 def test_large_compartment_is_hollow():
-    """The large (alumina) compartment is a separate void beyond the divider."""
+    """The large (alumina) compartment is a separate void beyond the gap."""
     body = make_body()
-    center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    probe = _probe(20, 30, 7, (center_x + 22, 0, 6.5))
+    # Probe well inside the large compartment, past the gap region.
+    probe = _probe(20, 30, 7, (30, 0, 6.5))
     assert _intersect_volume(body, probe) == pytest.approx(0, abs=1e-6)
 
 
@@ -234,7 +302,9 @@ def test_body_is_single_closed_shell():
     assert len(body.shells()) == 1
 
 
-# --- Lid geometry tests ---
+# ======================================================================
+# Lid geometry tests
+# ======================================================================
 
 
 def test_make_lid_small_returns_part():
@@ -252,11 +322,9 @@ def test_make_lid_large_returns_part():
 
 
 def test_lid_small_bounding_box():
-    """The small lid footprint spans the silica compartment up to the divider rim ridge."""
+    """The small lid footprint covers the full small container."""
     lid = make_lid_small()
-    divider_centerline = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    rim_ridge_half_width = DIVIDER_THICKNESS / 2 - RIM_INSET
-    right_edge = divider_centerline - rim_ridge_half_width
+    right_edge = _small_outer_right_x()
     expected_x_size = right_edge - (-LENGTH / 2)
     expected_y_size = 2 * _outer_half_width(right_edge)
     size = tuple(lid.bounding_box().size)
@@ -264,23 +332,30 @@ def test_lid_small_bounding_box():
 
 
 def test_lid_large_bounding_box():
-    """The large lid footprint spans the alumina compartment from the divider rim ridge."""
+    """The large lid footprint covers the full large container."""
     lid = make_lid_large()
-    divider_centerline = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    rim_ridge_half_width = DIVIDER_THICKNESS / 2 - RIM_INSET
-    left_edge = divider_centerline + rim_ridge_half_width
+    left_edge = _large_outer_left_x()
     expected_x_size = LENGTH / 2 - left_edge
     size = tuple(lid.bounding_box().size)
     assert size == pytest.approx((expected_x_size, LONG_END, LID_HEIGHT))
 
 
-def test_lids_are_separated_by_divider_rim_ridge():
-    """The two lids straddle the divider's 4 mm rim ridge without overlap."""
+def test_lids_are_separated_by_gap():
+    """The two lids have a GAP (5 mm) between their inner edges."""
     small_lid = make_lid_small()
     large_lid = make_lid_large()
     gap = large_lid.bounding_box().min.X - small_lid.bounding_box().max.X
-    assert gap == pytest.approx(DIVIDER_THICKNESS - 2 * RIM_INSET)
+    assert gap == pytest.approx(GAP)
     assert small_lid.bounding_box().max.X < large_lid.bounding_box().min.X
+
+
+def test_lids_clear_the_body_when_seated():
+    """Each lid seats over its container without intersecting the body."""
+    body = make_body()
+    lift = Location((0, 0, BODY_HEIGHT - RIM_HEIGHT))
+    for lid in (make_lid_small(), make_lid_large()):
+        seated = lid.moved(lift)
+        assert _intersect_volume(body, seated) == pytest.approx(0, abs=1e-6)
 
 
 def _lid_top_holes(lid: Part) -> list[object]:
@@ -295,7 +370,7 @@ def _lid_top_holes(lid: Part) -> list[object]:
 def test_lid_top_plates_have_a_grid_of_vent_slots():
     """Both lids' top plates are perforated by a full-width grid of slots.
 
-    The slots must cover most of the lid width, not just a single centerline
+    The slots must cover most of the lid width, not just a single centreline
     row (which was the bug being fixed).
     """
     for lid in (make_lid_small(), make_lid_large()):
@@ -306,11 +381,9 @@ def test_lid_top_plates_have_a_grid_of_vent_slots():
 
 
 def test_lid_small_skirt_is_hollow():
-    """The bottom 2 mm of the small lid is hollow except for the skirt wall."""
+    """The bottom 12 mm of the small lid is hollow except for the skirt wall."""
     lid = make_lid_small()
-    right_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO - (
-        DIVIDER_THICKNESS / 2 - RIM_INSET
-    )
+    right_x = _small_outer_right_x()
     center_x = (-LENGTH / 2 + right_x) / 2
     probe = _probe(
         20,
@@ -322,11 +395,9 @@ def test_lid_small_skirt_is_hollow():
 
 
 def test_lid_large_skirt_is_hollow():
-    """The bottom 2 mm of the large lid is hollow except for the skirt wall."""
+    """The bottom 12 mm of the large lid is hollow except for the skirt wall."""
     lid = make_lid_large()
-    left_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO + (
-        DIVIDER_THICKNESS / 2 - RIM_INSET
-    )
+    left_x = _large_outer_left_x()
     center_x = (left_x + LENGTH / 2) / 2
     probe = _probe(
         20,
@@ -423,7 +494,9 @@ def test_lid_large_is_single_closed_shell():
     assert len(lid.shells()) == 1
 
 
-# --- Vent-slot tests ---
+# ======================================================================
+# Vent-slot tests
+# ======================================================================
 
 
 def _slot_count_and_gap(span: float) -> tuple[int, float]:
@@ -596,7 +669,7 @@ def test_slanted_side_walls_have_vent_slots():
 
 
 def _lid_slot_grid(lid: Part) -> list[tuple[float, float]]:
-    """Recompute the (x, y) vent-slot centers of a lid's top-plate grid."""
+    """Recompute the (x, y) vent-slot centres of a lid's top-plate grid."""
     slope = (LONG_END - SHORT_END) / (2 * LENGTH)
     perp = math.sqrt(1 + slope * slope)
     skirt_inset = RIM_INSET - OOZE_CLEARANCE
@@ -623,7 +696,7 @@ def test_lid_small_top_plate_has_vent_slots():
     assert len(centers) > 100
     z = LID_HEIGHT - LID_TOP_THICKNESS / 2
 
-    # A computed slot center is a through-hole (void).
+    # A computed slot centre is a through-hole (void).
     x, y = centers[0]
     void_probe = Box(
         VENT_SLOT_LENGTH - 0.1,
@@ -689,31 +762,22 @@ def test_bottom_plate_has_no_vent_slots():
     )
 
 
-def test_divider_has_no_vent_slots():
-    """The internal dividing wall remains solid; no slots cut into it."""
-    body = make_body()
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    probe = _probe(DIVIDER_THICKNESS, 50, 7, (divider_center_x, 0, 3))
-    assert _intersect_volume(body, probe) == pytest.approx(
-        DIVIDER_THICKNESS * 50 * 7, abs=1e-5
-    )
-
-
-# --- Label inlay tests ---
+# ======================================================================
+# Label inlay tests
+# ======================================================================
 
 
 def _label_center_x(is_small: bool) -> float:
-    """X center of a label on a compartment floor.
+    """X centre of a label on a compartment floor.
 
-    The label is centered between the inner face of the relevant end wall and
-    the inner face of the divider.
+    The label is centred between the inner face of the relevant end wall and
+    the inner face of the gap-facing wall.
     """
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
     if is_small:
         left = -LENGTH / 2 + WALL_THICKNESS
-        right = divider_center_x - DIVIDER_THICKNESS / 2
+        right = _small_outer_right_x() - WALL_THICKNESS
     else:
-        left = divider_center_x + DIVIDER_THICKNESS / 2
+        left = _large_outer_left_x() + WALL_THICKNESS
         right = LENGTH / 2 - WALL_THICKNESS
     return (left + right) / 2
 
@@ -758,9 +822,9 @@ def test_body_assembly_contains_body_and_labels():
 
 
 def test_labels_are_confined_to_compartments():
-    """The label inlays stay on their own side of the divider."""
+    """The label inlays stay on their own side of the gap."""
     labels = make_labels()
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    gap_center = _gap_center_x()
     small_max = max(
         s.bounding_box().max.X
         for s in labels.solids()
@@ -771,5 +835,5 @@ def test_labels_are_confined_to_compartments():
         for s in labels.solids()
         if s.bounding_box().center().X > 0
     )
-    assert small_max < divider_center_x
-    assert large_min > divider_center_x
+    assert small_max < gap_center
+    assert large_min > gap_center
