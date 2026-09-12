@@ -4,7 +4,7 @@ The desiccant container is a two-compartment tray that holds filament desiccant 
 
 ## Purpose
 
-The tray keeps desiccant at the bottom of a clear cereal storage box so the filament stored in the box stays dry. A solid internal dividing wall splits the tray into two compartments, each with its own lid:
+The tray keeps desiccant at the bottom of a clear cereal storage box so the filament stored in the box stays dry. Two independent trapezoidal containers rise from a monolithic base plate, separated by a 5 mm gap, each with its own lid:
 
 - The **large compartment** occupies about two thirds of the length at the 75 mm end and holds **activated alumina**.
 - The **small compartment** occupies about one third of the length at the 65 mm end and holds **color-changing silica gel**.
@@ -24,19 +24,21 @@ Top view is an isosceles trapezoid, symmetric about its long centerline. All dim
 | Body total height | `BODY_HEIGHT` | 23.0 |
 | Bottom plate thickness | `BOTTOM_THICKNESS` | 2.0 |
 | Outer wall thickness | `WALL_THICKNESS` | 4.0 |
-| Internal dividing-wall thickness | `DIVIDER_THICKNESS` | 8.0 |
+| Gap between the two containers | `GAP` | 5.0 |
 | Lid total height | `LID_HEIGHT` | 14.0 |
 | Lid top-plate thickness | `LID_TOP_THICKNESS` | 2.0 |
 | Rim height (vertical engagement) | `RIM_HEIGHT` | 12.0 |
 | Rim inset from the wall's outer face | `RIM_INSET` | 2.0 |
 | Lid-to-rim radial clearance (ooze allowance) | `OOZE_CLEARANCE` | 0.2 |
-| Divider position, as a fraction of length from the short end | `DIVIDER_RATIO` | 1/3 |
+| Gap centre position, as a fraction of length from the short end | `DIVIDER_RATIO` | 1/3 |
 
 The assembled container is 25 mm tall: a 23 mm body plus a 14 mm lid whose 12 mm skirt overlaps the body's 12 mm rim. The taper is intentional and matches the cereal container's floor; at roughly 1.5° per side it presents no meaningful overhang.
 
-Each lid is a 2 mm top plate plus a 12 mm skirt. The skirt drops over the rim with its outer face flush with the body's outer face and a 0.2 mm radial clearance, so the lids mate without binding. The tall rim gives the skirt a long gripping surface so the lids stay in place. The divider's 4 mm rim ridge separates the two lids along the top, keeping each compartment independently openable.
+The body consists of a monolithic 2 mm thick base plate spanning the full 185 × (65/75) mm footprint, with two independent trapezoidal containers rising from it. Each container has 4 mm walls on all four sides and a full-perimeter 12 mm tall rim stepped 2 mm inward from the outer face of every wall. The containers are separated by a 5 mm air gap centred at `DIVIDER_RATIO` (1/3) of the length from the short end.
 
-Ventilation comes from rectangular through-slots, 5 mm long by 1 mm tall, spaced with a 1 mm solid margin. They cut through both lids' top plates (as a grid covering each lid top) and the four outer side walls below the rim. The bottom plate, the rim, and the internal dividing wall carry no vents.
+Each lid is a 2 mm top plate plus a 12 mm skirt. The skirt drops over its container's rim with its outer face flush with the container's outer face and a 0.2 mm radial clearance, so the lids mate without binding. The tall rim gives the skirt a long gripping surface so the lids stay in place. The two lids sit adjacent with a 5 mm gap between them, keeping each compartment independently openable.
+
+Ventilation comes from rectangular through-slots, 5 mm long by 1 mm tall, spaced with a 1 mm solid margin. They cut through both lids' top plates (as a grid covering each lid top) and all four side walls of each container below the rim. The bottom plate and the rim carry no vents.
 
 The interior floor of each compartment carries its desiccant's name — `SILICA` in the small compartment and `ALUMINA` in the large compartment — as a flush, 0.8 mm-deep inlay. The lettering is a separate part, printed in a contrasting filament and pressed into matching recesses cut into the floor, so the compartments are identifiable when opened for refill.
 

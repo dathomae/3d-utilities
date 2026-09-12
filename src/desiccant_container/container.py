@@ -1,36 +1,32 @@
 """Parametric geometry for the desiccant container body and lids.
 
-The body is a trapezoidal tray: an isosceles trapezoid in plan view,
-symmetric about its long centerline, centered on the origin (X along length,
-Y across width, Z up).  It holds two compartments of desiccant:
+The body is a monolithic 185 x (65/75) mm base plate with two independent
+trapezoidal containers rising from it, separated by a 5 mm gap centred at
+``DIVIDER_RATIO`` of the length from the short end.  Each container has 4 mm
+walls on all four sides, a full-perimeter ``RIM_HEIGHT``-tall rim stepped
+``RIM_INSET`` inward on every wall, a 2 mm bottom plate, and carries one
+desiccant:
 
-* the small (silica) compartment at the 65 mm short end, and
-* the large (alumina) compartment at the 75 mm long end.
+* the small (silica) container at the 65 mm short end, and
+* the large (alumina) container at the 75 mm long end.
 
-It consists of a 2 mm bottom plate, 4 mm outer walls, a solid 8 mm internal
-dividing wall (no vents) that keeps the two desiccants apart, and a
-``RIM_HEIGHT``-tall rim stepped ``RIM_INSET`` inward on the top of every wall
-(outer perimeter and divider).  All dimensions are module-level parameters in
-millimetres.
-
-Two separate lids close the compartments: each is a 2 mm top plate plus a
-``RIM_HEIGHT``-tall skirt, with the skirt's outer face flush with the body's
-outer face and a ``OOZE_CLEARANCE`` radial gap to the rim's outer face so the
-lids mate without binding.
+Two separate lids close the containers: each is a 2 mm top plate plus a
+``RIM_HEIGHT``-tall skirt, with the skirt's outer face flush with the
+container's outer face and a ``OOZE_CLEARANCE`` radial gap to the rim's outer
+face so the lids mate without binding.
 
 Ventilation: 5 x 1 mm rectangular through-slots (``VENT_SLOT_LENGTH`` x
 ``VENT_SLOT_HEIGHT``) with 1 mm solid margins (``VENT_MARGIN``) perforate
-the four outer side walls below the rim and both lids' top plates - never the
-bottom plate, the rim, or the internal dividing wall.  Cutting boxes extend
-slightly past the faces they pierce (``VENT_OVERCUT``, ``LID_SLOT_OVERCUT``)
-so the booleans stay clean.
+all four side walls of each container below the rim and both lids' top plates
+- never the bottom plate or the rim.  Cutting boxes extend slightly past the
+faces they pierce (``VENT_OVERCUT``, ``LID_SLOT_OVERCUT``) so the booleans
+stay clean.
 
 The interior cavity is formed by offsetting each of the four outer faces
 inward by ``WALL_THICKNESS`` perpendicular to that face (a true polygon
 offset), so the slanted side walls - like the end walls - are exactly
-``WALL_THICKNESS`` thick measured normal to the face.  The same
-perpendicular offset (by ``RIM_INSET``) defines the rim step on the top of
-every wall.
+``WALL_THICKNESS`` thick measured normal to the face.  The same perpendicular
+offset (by ``RIM_INSET``) defines the rim step on the top of every wall.
 
 The two compartments are identified by ``SILICA`` and ``ALUMINA`` lettering
 inlaid flush into the interior floor.  The lettering is a separate part
@@ -70,11 +66,13 @@ LONG_END = 75.0
 BODY_HEIGHT = 23.0
 BOTTOM_THICKNESS = 2.0
 WALL_THICKNESS = 4.0
-DIVIDER_THICKNESS = 8.0
 # The rim is the lip the lids grip.  The full-thickness wall below it is
 # ``BODY_HEIGHT - RIM_HEIGHT`` tall and carries the vent slots.
 RIM_HEIGHT = 12.0
 RIM_INSET = 2.0
+# The gap between the two independent containers.  Its centre is
+# ``DIVIDER_RATIO`` of LENGTH from the short end.
+GAP = 5.0
 DIVIDER_RATIO = 1 / 3
 
 # --- Lid dimensions (mm) ---
@@ -107,11 +105,11 @@ def _trapezoid_vertices(
     long_end: float,
     inset: float = 0.0,
 ) -> list[Vector]:
-    """Corner vertices of an isosceles trapezoid centered on the origin.
+    """Corner vertices of an isosceles trapezoid centred on the origin.
 
     X spans ``+/- length/2`` along the length; Y spans ``+/- short_end/2``
-    at the short (silica) end and ``+/- long_end/2`` at the long (alumina)
-    end.  ``inset`` offsets each of the four faces inward by that amount
+    at the short (left) end and ``+/- long_end/2`` at the long (right) end.
+    ``inset`` offsets each of the four faces inward by that amount
     PERPENDICULAR to the face (a true polygon offset), so an inset face is
     exactly ``inset`` away from its outer counterpart everywhere and the
     slanted side walls keep the outer taper.  ``inset=0`` yields the outer
@@ -160,8 +158,15 @@ def _wall_length() -> float:
     return math.sqrt(LENGTH ** 2 + ((LONG_END - SHORT_END) / 2) ** 2)
 
 
+def _container_wall_length(left_x: float, right_x: float) -> float:
+    """Length of one slanted side wall within [left_x, right_x], in mm."""
+    dx = right_x - left_x
+    dy = _outer_half_width(right_x) - _outer_half_width(left_x)
+    return math.sqrt(dx ** 2 + dy ** 2)
+
+
 def _slot_centers(span: float, slot_size: float, margin: float) -> tuple[list[float], float]:
-    """Return equally spaced slot centers and the gap between them within ``span``.
+    """Return equally spaced slot centres and the gap between them within ``span``.
 
     Edge margins are exactly ``margin``. The gap between adjacent slots is always
     >= ``margin`` (any leftover span is distributed evenly as extra gap).
@@ -177,15 +182,14 @@ def _slot_centers(span: float, slot_size: float, margin: float) -> tuple[list[fl
     return [first + i * (slot_size + gap) for i in range(n)], gap
 
 
-def _body_vent_slot_boxes() -> list[Part]:
-    """Positioned through-slot boxes for the four outer walls of the body.
+def _container_vent_slot_boxes(left_x: float, right_x: float) -> list[Part]:
+    """Positioned through-slot boxes for all four walls of a container
+    spanning [left_x, right_x].
 
     The boxes are returned as a list of un-cut shapes so ``make_body`` can
-    subtract them from the base tray in a single fused boolean operation
-    (hundreds of sequential ``Mode.SUBTRACT`` boxes would take minutes).
-    Slots perforate only the full-thickness wall below the rim (the rim the
-    lids grip is left solid), and never the bottom plate or the internal
-    dividing wall.  Each box extends slightly beyond the wall faces
+    subtract them in a single fused boolean operation.  Slots perforate only
+    the full-thickness wall below the rim, and never the bottom plate or the
+    rim itself.  Each box extends slightly beyond the wall faces
     (``VENT_OVERCUT``) to avoid coplanar boolean issues.
     """
     boxes: list[Part] = []
@@ -196,11 +200,13 @@ def _body_vent_slot_boxes() -> list[Part]:
     if not z_centers:
         return boxes
 
-    # Short end wall (X = -LENGTH/2).  ``_slot_centers`` returns positions in
-    # ``[0, span]``, so recentre them about the wall: subtract SHORT_END / 2.
-    y_centers, _ = _slot_centers(SHORT_END, VENT_SLOT_LENGTH, VENT_MARGIN)
+    left_half = _outer_half_width(left_x)
+    right_half = _outer_half_width(right_x)
+
+    # Left end wall.
+    y_centers, _ = _slot_centers(2 * left_half, VENT_SLOT_LENGTH, VENT_MARGIN)
     for y_rel in y_centers:
-        y = y_rel - SHORT_END / 2
+        y = y_rel - left_half
         for z in z_centers:
             boxes.append(
                 Box(
@@ -208,13 +214,13 @@ def _body_vent_slot_boxes() -> list[Part]:
                     VENT_SLOT_LENGTH,
                     VENT_SLOT_HEIGHT,
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
-                ).moved(Location((-LENGTH / 2 + WALL_THICKNESS / 2, y, z)))
+                ).moved(Location((left_x + WALL_THICKNESS / 2, y, z)))
             )
 
-    # Long end wall (X = +LENGTH/2).
-    y_centers, _ = _slot_centers(LONG_END, VENT_SLOT_LENGTH, VENT_MARGIN)
+    # Right end wall.
+    y_centers, _ = _slot_centers(2 * right_half, VENT_SLOT_LENGTH, VENT_MARGIN)
     for y_rel in y_centers:
-        y = y_rel - LONG_END / 2
+        y = y_rel - right_half
         for z in z_centers:
             boxes.append(
                 Box(
@@ -222,19 +228,19 @@ def _body_vent_slot_boxes() -> list[Part]:
                     VENT_SLOT_LENGTH,
                     VENT_SLOT_HEIGHT,
                     align=(Align.CENTER, Align.CENTER, Align.CENTER),
-                ).moved(Location((LENGTH / 2 - WALL_THICKNESS / 2, y, z)))
+                ).moved(Location((right_x - WALL_THICKNESS / 2, y, z)))
             )
 
     # Slanted side walls (both Y signs).
     angle = _wall_angle()
-    wall_len = _wall_length()
+    wall_len = _container_wall_length(left_x, right_x)
     s_centers, _ = _slot_centers(wall_len, VENT_SLOT_LENGTH, VENT_MARGIN)
     for y_sign in (1, -1):
         angle_deg = (
             math.degrees(angle) if y_sign > 0 else math.degrees(-angle)
         )
         for s in s_centers:
-            x = -LENGTH / 2 + s * math.cos(angle)
+            x = left_x + s * math.cos(angle)
             outer_y = y_sign * _outer_half_width(x)
             inner_y = y_sign * _interior_half_width(x)
             mid_y = (outer_y + inner_y) / 2
@@ -252,117 +258,156 @@ def _body_vent_slot_boxes() -> list[Part]:
 
 
 def _label_centers() -> tuple[float, float]:
-    """X centers of the SILICA (small) and ALUMINA (large) label inlays.
+    """X centres of the SILICA (small) and ALUMINA (large) label inlays.
 
-    Each label is centered between the inner face of its end wall and the
-    inner face of the divider, on the interior floor.
+    Each label is centred between the inner face of its end wall and the
+    inner face of the gap-facing wall, on the interior floor.
     """
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    small = (
-        -LENGTH / 2 + WALL_THICKNESS + divider_center_x - DIVIDER_THICKNESS / 2
-    ) / 2
-    large = (
-        divider_center_x + DIVIDER_THICKNESS / 2 + LENGTH / 2 - WALL_THICKNESS
-    ) / 2
-    return small, large
+    gap_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    gap_half = GAP / 2
+    small_left = -LENGTH / 2 + WALL_THICKNESS
+    small_right = gap_center_x - gap_half - WALL_THICKNESS
+    large_left = gap_center_x + gap_half + WALL_THICKNESS
+    large_right = LENGTH / 2 - WALL_THICKNESS
+    return (small_left + small_right) / 2, (large_left + large_right) / 2
 
 
 def make_body() -> Part:
     """Return the desiccant container body as a build123d Part.
 
     Construction:
-    1. extrude the outer trapezoid footprint to ``BODY_HEIGHT``,
-    2. cut the interior cavity (outer faces offset inward by
-       ``WALL_THICKNESS`` perpendicular to each face) from the top of the
-       ``BOTTOM_THICKNESS`` bottom plate up to the body top,
-    3. add the solid ``DIVIDER_THICKNESS`` dividing wall at ``DIVIDER_RATIO``
-       of the length from the short end's outer face, spanning the full
-       interior width so the two compartments are sealed from each other,
-    4. step the top ``RIM_HEIGHT`` mm of every wall inward by ``RIM_INSET``:
-       a ring around the outer perimeter (rim flush with the interior face,
-       leaving a 2 mm exterior shelf) and two 2 mm shelves on the divider,
-       leaving the 4 mm centered divider rim ridge,
-    5. cut ``LABEL_DEPTH``-deep recesses for the SILICA and ALUMINA label
-       inlays into the interior floor (see ``make_labels``),
-    6. cut the vent slots (5 x 1 mm, 1 mm margins, see
-       ``_body_vent_slot_boxes``) through the four outer side walls below the
-       rim in a single fused boolean operation; the bottom plate, the rim, and
-       the internal dividing wall carry no vents.
+    1. extrude the full outer trapezoid footprint to ``BOTTOM_THICKNESS`` to
+       form the shared base plate,
+    2. build the small container: extrude its outer trapezoid footprint from
+       the base top, hollow out its interior, cut its full-perimeter rim ring,
+    3. build the large container: same operations with its own footprint,
+    4. cut ``LABEL_DEPTH``-deep recesses for the SILICA and ALUMINA label
+       inlays into each container's interior floor (see ``make_labels``),
+    5. cut the vent slots (5 x 1 mm, 1 mm margins) through all four side walls
+       of each container below the rim, in a single fused boolean operation;
+       the bottom plate and the rim carry no vents.
     """
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    # The interior narrows toward the short end, so the divider must span the
-    # interior width at its widest (long-end) face to seal both compartments.
-    divider_half_span = _interior_half_width(
-        divider_center_x + DIVIDER_THICKNESS / 2
-    )
+    gap_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    gap_half = GAP / 2
+
+    # Small container outer footprint.
+    small_left_x = -LENGTH / 2
+    small_right_x = gap_center_x - gap_half
+    small_outer_length = small_right_x - small_left_x
+    small_center_x = (small_left_x + small_right_x) / 2
+    small_left_width = SHORT_END
+    small_right_width = 2 * _outer_half_width(small_right_x)
+
+    # Large container outer footprint.
+    large_left_x = gap_center_x + gap_half
+    large_right_x = LENGTH / 2
+    large_outer_length = large_right_x - large_left_x
+    large_center_x = (large_left_x + large_right_x) / 2
+    large_left_width = 2 * _outer_half_width(large_left_x)
+    large_right_width = LONG_END
 
     with BuildPart() as body:
-        # 1. Outer trapezoid footprint, full height.
+        # 1. Shared base plate: full trapezoid, BOTTOM_THICKNESS tall.
         with BuildSketch(Plane.XY):
             Polygon(_trapezoid_vertices(LENGTH, SHORT_END, LONG_END))
-        extrude(amount=BODY_HEIGHT)
+        extrude(amount=BOTTOM_THICKNESS)
 
-        # 2. Interior cavity, from the bottom plate top to the body top.
+        # 2a. Small container: extrude outer footprint above the base.
+        small_outer = _trapezoid_vertices(
+            small_outer_length, small_left_width, small_right_width
+        )
+        small_outer = [v + Vector(small_center_x, 0) for v in small_outer]
         with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
-            Polygon(
-                _trapezoid_vertices(LENGTH, SHORT_END, LONG_END, WALL_THICKNESS)
-            )
+            Polygon(small_outer)
+        extrude(amount=BODY_HEIGHT - BOTTOM_THICKNESS)
+
+        # 2b. Small container: hollow out interior (WALL_THICKNESS walls).
+        small_inner = _trapezoid_vertices(
+            small_outer_length, small_left_width, small_right_width,
+            WALL_THICKNESS,
+        )
+        small_inner = [v + Vector(small_center_x, 0) for v in small_inner]
+        with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
+            Polygon(small_inner)
         extrude(amount=BODY_HEIGHT - BOTTOM_THICKNESS, mode=Mode.SUBTRACT)
 
-        # 3. Solid internal dividing wall (no vents), bottom to top.
-        with Locations((divider_center_x, 0, 0)):
-            Box(
-                DIVIDER_THICKNESS,
-                2 * divider_half_span,
-                BODY_HEIGHT,
-                align=(Align.CENTER, Align.CENTER, Align.MIN),
-            )
+        # 3a. Large container: extrude outer footprint above the base.
+        large_outer = _trapezoid_vertices(
+            large_outer_length, large_left_width, large_right_width
+        )
+        large_outer = [v + Vector(large_center_x, 0) for v in large_outer]
+        with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
+            Polygon(large_outer)
+        extrude(amount=BODY_HEIGHT - BOTTOM_THICKNESS)
 
-        # 4a. Perimeter rim: remove the outer RIM_INSET ring from the top
-        #     RIM_HEIGHT mm, leaving a 2 mm rim flush with the interior face
-        #     and a 2 mm shelf on the exterior.
+        # 3b. Large container: hollow out interior.
+        large_inner = _trapezoid_vertices(
+            large_outer_length, large_left_width, large_right_width,
+            WALL_THICKNESS,
+        )
+        large_inner = [v + Vector(large_center_x, 0) for v in large_inner]
+        with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
+            Polygon(large_inner)
+        extrude(amount=BODY_HEIGHT - BOTTOM_THICKNESS, mode=Mode.SUBTRACT)
+
+        # 4a. Small container perimeter rim ring: cut away the top RIM_HEIGHT
+        #     outer RIM_INSET ring, leaving a 2 mm rim flush with the interior.
+        small_rim_outer = _trapezoid_vertices(
+            small_outer_length, small_left_width, small_right_width
+        )
+        small_rim_outer = [v + Vector(small_center_x, 0) for v in small_rim_outer]
+        small_rim_inner = _trapezoid_vertices(
+            small_outer_length, small_left_width, small_right_width, RIM_INSET
+        )
+        small_rim_inner = [v + Vector(small_center_x, 0) for v in small_rim_inner]
         with BuildSketch(Plane.XY.offset(BODY_HEIGHT - RIM_HEIGHT)):
-            Polygon(_trapezoid_vertices(LENGTH, SHORT_END, LONG_END))
-            Polygon(
-                _trapezoid_vertices(LENGTH, SHORT_END, LONG_END, RIM_INSET),
-                mode=Mode.SUBTRACT,
-            )
+            Polygon(small_rim_outer)
+            Polygon(small_rim_inner, mode=Mode.SUBTRACT)
         extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
 
-        # 4b. Divider rim: remove the two 2 mm shelves, leaving a 4 mm ridge
-        #     centered on the divider (inset 2 mm from both faces).
-        for shelf_center_x in (
-            divider_center_x - DIVIDER_THICKNESS / 2 + RIM_INSET / 2,
-            divider_center_x + DIVIDER_THICKNESS / 2 - RIM_INSET / 2,
-        ):
-            with BuildSketch(Plane.XY.offset(BODY_HEIGHT - RIM_HEIGHT)):
-                with Locations((shelf_center_x, 0)):
-                    Rectangle(RIM_INSET, 2 * divider_half_span)
-            extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
+        # 4b. Large container perimeter rim ring.
+        large_rim_outer = _trapezoid_vertices(
+            large_outer_length, large_left_width, large_right_width
+        )
+        large_rim_outer = [v + Vector(large_center_x, 0) for v in large_rim_outer]
+        large_rim_inner = _trapezoid_vertices(
+            large_outer_length, large_left_width, large_right_width, RIM_INSET
+        )
+        large_rim_inner = [v + Vector(large_center_x, 0) for v in large_rim_inner]
+        with BuildSketch(Plane.XY.offset(BODY_HEIGHT - RIM_HEIGHT)):
+            Polygon(large_rim_outer)
+            Polygon(large_rim_inner, mode=Mode.SUBTRACT)
+        extrude(amount=RIM_HEIGHT, mode=Mode.SUBTRACT)
 
         # 5. Label-inlay recesses: cut LABEL_DEPTH-deep pockets for the
         #    separate SILICA and ALUMINA inlay part into the interior floor.
-        small_center_x, large_center_x = _label_centers()
+        small_center_label_x, large_center_label_x = _label_centers()
         with BuildSketch(Plane.XY.offset(BOTTOM_THICKNESS)):
-            with Locations((small_center_x, 0)):
+            with Locations((small_center_label_x, 0)):
                 Text(SILICA_LABEL, font_size=LABEL_FONT_SIZE)
-            with Locations((large_center_x, 0)):
+            with Locations((large_center_label_x, 0)):
                 Text(ALUMINA_LABEL, font_size=LABEL_FONT_SIZE)
         extrude(amount=-LABEL_DEPTH, mode=Mode.SUBTRACT)
 
-    # 6. Vent slots on the four outer side walls below the rim (never on the
-    #    bottom plate, the rim, or the divider): cut the fused slot tool from
-    #    the tray in a single boolean operation.
-    return Part([body.part.cut(*_body_vent_slot_boxes())])
+    # 6. Vent slots on all four side walls of each container (never on the
+    #    bottom plate or the rim), fused into a single boolean cut.
+    return Part(
+        [
+            body.part.cut(
+                *_container_vent_slot_boxes(small_left_x, small_right_x),
+                *_container_vent_slot_boxes(large_left_x, large_right_x),
+            )
+        ]
+    )
 
 
 def _make_lid(left_x: float, right_x: float) -> Part:
     """Return a lid covering the trapezoidal footprint between two X stations.
 
-    The lid is a 2 mm top plate plus a 2 mm skirt.  The skirt wall is
+    The lid is a 2 mm top plate plus a 12 mm skirt.  The skirt wall is
     inset from the outer footprint by ``RIM_INSET - OOZE_CLEARANCE`` so it
-    clears the body's 2 mm rim by ``OOZE_CLEARANCE`` radially while the
-    skirt's outer face stays flush with the body's outer face.
+    clears the container's 2 mm rim by ``OOZE_CLEARANCE`` radially while the
+    skirt's outer face stays flush with the container's outer face.
 
     The top plate carries a grid of vent slots (5 x 1 mm, 1 mm margins):
     columns run along the lid's length and rows across its width, following
@@ -387,7 +432,7 @@ def _make_lid(left_x: float, right_x: float) -> Part:
             Polygon(outer)
         extrude(amount=LID_HEIGHT)
 
-        # Hollow out the underside to leave a 2 mm skirt around the rim.
+        # Hollow out the underside to leave a 12 mm skirt around the rim.
         with BuildSketch(Plane.XY):
             Polygon(inner)
         extrude(amount=LID_HEIGHT - LID_TOP_THICKNESS, mode=Mode.SUBTRACT)
@@ -423,16 +468,16 @@ def _make_lid(left_x: float, right_x: float) -> Part:
 
 
 def make_lid_small() -> Part:
-    """Return the lid for the small (silica) compartment."""
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    right_x = divider_center_x - (DIVIDER_THICKNESS / 2 - RIM_INSET)
+    """Return the lid for the small (silica) container."""
+    gap_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    right_x = gap_center_x - GAP / 2
     return _make_lid(-LENGTH / 2, right_x)
 
 
 def make_lid_large() -> Part:
-    """Return the lid for the large (alumina) compartment."""
-    divider_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
-    left_x = divider_center_x + (DIVIDER_THICKNESS / 2 - RIM_INSET)
+    """Return the lid for the large (alumina) container."""
+    gap_center_x = -LENGTH / 2 + LENGTH * DIVIDER_RATIO
+    left_x = gap_center_x + GAP / 2
     return _make_lid(left_x, LENGTH / 2)
 
 
